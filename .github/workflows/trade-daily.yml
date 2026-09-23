@@ -48,6 +48,7 @@ jobs:
       - name: Prepare current private main and locked environment
         env:
           TRADE_READ_TOKEN: ${{ secrets.TRADE_READ_TOKEN }}
+          SOURCE_TOKEN_VARIABLE_PRESENT: ${{ vars.TRADE_READ_TOKEN != '' }}
         run: python bootstrap.py
       - name: Execute production and verify private durable readback
         env:
