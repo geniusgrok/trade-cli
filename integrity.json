@@ -20,9 +20,9 @@
     "sha256": "f40a53addb36e41f353ac7e06f4f2632010e65f59c13aa6ce05d4cb3a57b6523"
   },
   "migrate_legacy.py": {
-    "bytes": 3831,
-    "git_blob": "0d29b3acd486ddd83db6ac24d7170dd1b15202c0",
-    "sha256": "591131706ad48815bff727108408edabb6a5b655ea8f62ef2b80d9c36f0e7017"
+    "bytes": 4300,
+    "git_blob": "4ad452ac5798aadb15f45c3b8f2fc9756b603964",
+    "sha256": "aa47b3bd7e2248a4932aba2e0bb63d1fd85a5b91c3e5ec655a7da0a2a264f615"
   },
   "preflight.py": {
     "bytes": 634,

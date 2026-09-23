@@ -40,6 +40,13 @@ def risk_from_bundle(bundle: bytes) -> dict | None:
 
 
 def main() -> None:
+    marker = 'migration/legacy-complete.json.enc'
+    _, _, files = store._snapshot()
+    if marker in files:
+        if store._read(marker, files) != {'first_day': FIRST_DAY.isoformat(), 'completed': True}:
+            raise ValueError('LEGACY_MARKER_INVALID')
+        print('LEGACY_IMPORT_ALREADY_VERIFIED')
+        return
     today = datetime.now(ZoneInfo('Asia/Shanghai')).date()
     if (today - FIRST_DAY).days >= 32:
         raise ValueError('LEGACY_IMPORT_WINDOW_EXPIRED')
@@ -79,6 +86,8 @@ def main() -> None:
         imported += 1
     if not found:
         raise ValueError('NO_LEGACY_RESULT_TO_IMPORT')
+    head, tree, files = store._snapshot()
+    store._commit(marker, {'first_day': FIRST_DAY.isoformat(), 'completed': True}, head, tree, files)
     print('LEGACY_RESULT_IMPORT_VERIFIED:', imported)
 
 
