@@ -12,7 +12,7 @@ on:
         default: ''
   push:
     branches: [main]
-    paths: ['.github/workflows/trade-daily.yml']
+    paths: ['.github/workflows/trade-daily.yml', '*.py', 'store/**', 'tests/**']
 
 permissions:
   contents: read

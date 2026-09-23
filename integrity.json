@@ -1,8 +1,8 @@
 {
   ".github/workflows/trade-daily.yml": {
-    "bytes": 1604,
-    "sha256": "18efbf8ce4a2a4f741072bd9bfafdcdf73f9e99487c351a8d7cc12b2145dc8fb",
-    "git_blob": "5d13220d9a5ff7fc15b8853eac0c4529413e923d"
+    "bytes": 1636,
+    "sha256": "b8a822ab31d34c370a060a1db8e588df6aa157ef39de4a0155dcb5a56c536163",
+    "git_blob": "d673c1523a514ef54d6c5f810be2ad68326c23a4"
   },
   ".gitignore": {
     "bytes": 53,
@@ -20,14 +20,14 @@
     "git_blob": "47b4918c36a4b25c86a76c2a8e98186ac529fdc1"
   },
   "preflight.py": {
-    "bytes": 1328,
-    "sha256": "63987d3b2ac1fe7ac12c18d3ff9a11c7d41ce0c122d952d8952946cc8f01df7e",
-    "git_blob": "d6ae5248d58340aaba70d6c48b51d9780d9c99c1"
+    "bytes": 1481,
+    "sha256": "e7c99cddffb0c14fef3da4e2c1ff147f0853ad99ceb8d962c478cc1d9742a36f",
+    "git_blob": "f9613a5b6503463e3c3ff3481ff913f6ade8aa8a"
   },
   "private_store.py": {
-    "bytes": 5510,
-    "sha256": "f13cdeb8f536ce687b5a763bae08a5b13bf5dbdfdbe8f86c524a3f4d3f28da63",
-    "git_blob": "0833bfbe000a421bc2340b008daccc49e9334c8e"
+    "bytes": 5901,
+    "sha256": "2d6cbfbfd1fa7104d4a3802cc6e44ee0178aec776c1bc0f0eac72f19eca525a6",
+    "git_blob": "2e04cc753e8b354480e769d4202b6363e3428b50"
   },
   "report.py": {
     "bytes": 6241,
@@ -40,9 +40,9 @@
     "git_blob": "ce235e6f7324df475f38bddefbf34d6b5a92db6c"
   },
   "store/auth.mjs": {
-    "bytes": 956,
-    "sha256": "10603079a589067160c9ecfaee03e088a9a8d498fe8b2498866aedd494199b6d",
-    "git_blob": "be709675cbf01b5ea7beac528cb51efd7acd4bb2"
+    "bytes": 977,
+    "sha256": "93dd36d7d564cc0a4bac966cc836b5f673157a56b3596fe4b9e18142987a0bd6",
+    "git_blob": "bb58b397b2be788f98abcb2c197ee11f35dea428"
   },
   "store/deno.json": {
     "bytes": 75,
@@ -60,9 +60,9 @@
     "git_blob": "7198e1729fff99588a3301be83863d0002d9525e"
   },
   "tests/auth.test.mjs": {
-    "bytes": 1041,
-    "sha256": "3bb164c8e86c50c84a4905d7edcfbd8e9a0540ce35cce38b8c4cbb7761f8e9a3",
-    "git_blob": "1e4ae0d1ffa4540f38ac6963e4e95cca02f3be7f"
+    "bytes": 1199,
+    "sha256": "711df1525351cac9d5776df7ad7bee0df912937263a80e28044987ff00d9f6b8",
+    "git_blob": "791afa03f03d1a892ec131eb186c755ec5f5c3a4"
   },
   "tests/test_runner.py": {
     "bytes": 5549,

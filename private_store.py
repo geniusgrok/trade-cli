@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import tarfile
 import urllib.error
@@ -31,6 +32,14 @@ def _read_json(request: urllib.request.Request) -> dict:
         if result is not None and not isinstance(result, dict):
             raise RuntimeError('INVALID_STORE_RESPONSE')
         return result
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read(1024))
+            code = body.get('error', '')
+        except (ValueError, AttributeError):
+            code = ''
+        safe = code if isinstance(code, str) and re.fullmatch('[A-Z_]{3,60}', code) else 'REJECTED'
+        raise RuntimeError(f'PRIVATE_HTTP_{exc.code}_{safe}') from None
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         raise RuntimeError('PRIVATE_TRANSPORT_FAILED') from exc
 

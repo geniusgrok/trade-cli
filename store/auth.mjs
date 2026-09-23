@@ -4,7 +4,7 @@ export function authorize(p) {
     repository: 'geniusgrok/trade-cli', repository_id: '1382522505',
     repository_owner: 'geniusgrok', repository_owner_id: '332557824',
     ref: 'refs/heads/main',
-    sub: 'repo:geniusgrok/trade-cli:ref:refs/heads/main',
+    sub: 'repo:geniusgrok@332557824/trade-cli@1382522505:ref:refs/heads/main',
     workflow_ref: 'geniusgrok/trade-cli/.github/workflows/trade-daily.yml@refs/heads/main',
     runner_environment: 'github-hosted',
   };
