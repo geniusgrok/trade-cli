@@ -1,44 +1,45 @@
-# Trade Core17 daily runner
+# Trade Core17 盘后日报
 
-This public repository contains orchestration only. The production strategy stays in private `ychenracing/trade`; every run checks out its current `main` and records the actual SHA. It does not place broker orders or represent real holdings.
+本仓库负责每日行情准备、生产策略运行和中文日报发布，仅用于策略观察与人工决策支持，不连接券商、不下单，也不代表真实账户的持仓或成交。
 
-## Execution and privacy
+## 查看日报
 
-The formal workflow is `.github/workflows/trade-daily.yml`: Monday–Friday at `09:01 UTC` (`17:01 Asia/Shanghai`), with manual `workflow_dispatch`. Publishing or changing that workflow also performs deployment acceptance against the most recent completed session; this is labelled separately from a current-day scheduled report. The same database reservation applies to every trigger and retry.
+盘后日报以 Markdown 文件保存在 [日报目录](reports/)，文件名为交易日期，例如 `2026-09-22.md`。每份日报包含实际行情截止日、生产源码版本、运行记录、市场状态、市场风险、Core17 全部标的及相对前一交易日的变化。
 
-`TRADE_READ_TOKEN` is used only to read the private source. Python 3.12 installs that revision's `requirements-lock.txt`. The runner calls the existing production preparation, market validation, snapshot, replay and publication services. It reads Core17 members and order from `quantfusion/config/universe.py`, not a copied list. No strategy implementation, threshold or research pool is changed here.
+完整保留生产字段和原始信号枚举，并使用中文标题、字段说明及状态解释。未输出的字段标注“未提供”；前一交易日结果无法核验时标注“不可比较”，不能解释为“无变化”。降级或失败必须如实保留，不能因为文件已发布就视为正常扫描。
 
-Reports, input snapshots, native risk state and diagnostic logs are never uploaded to this public repository, Actions artifacts, cache or job summaries. Public output is restricted to fixed status codes, source SHA and execution identity.
+## 运行安排
 
-Private persistence uses the already connected Supabase project `ykhdfyjbfdvayqmvaxgb`, schema `trade_daily`. Its tables are outside the exposed REST schema, have RLS enabled and grant no access to anonymous or authenticated application users. The `trade-daily` Edge Function verifies GitHub's signed OIDC token, exact audience, repository/owner IDs, main ref and formal workflow identity. It uses platform-injected database credentials internally; no additional long-lived credential is added to GitHub.
+每周一至周五北京时间 17:01 计划启动，时区固定为 `Asia/Shanghai`。这只是启动时间，不保证该分钟内完成日报。每次先核验交易日历和收盘时间；休市日或尚未收盘时，不生成新的盘后信号，也不以旧日期报告冒充当天结果。
 
-## Once per trading day
+正式工作流为 `.github/workflows/trade-daily.yml`。手动运行时可以填写已完成收盘的目标交易日，留空使用北京时间当天。部署变更会针对最近一个已完成交易日进行验收；已有结果时直接复用，不重新计算。
 
-Preparation is repeatable; the database atomically reserves the target trading date immediately before the native production replay. Only the winning reservation may compute. Started calculations are never automatically restarted, including failed/cancelled runs. A completed run can retry delivery with identical bytes. Publication stores the report, native risk state and exact compressed evidence in one transaction. The runner downloads the saved bundle again and verifies bytes and SHA-256.
+每次使用运行时最新的生产主分支和锁定依赖，记录实际执行的源码版本。Core17 成员及顺序从当次生产配置读取，不在本仓库复制固定名单。行情准备和策略计算沿用生产实现，不另造模型，不修改策略参数或风险规则。
 
-Before each new date, the latest validated native risk state and input cache are restored. The native fixed-start simulation remains a simulation: no fabricated account, rolling start or risk reset. Reports compare only with the preceding actual trading day's saved structured result. Missing or incompatible baselines are `不可比较`; absent fields are `未提供`.
+## 同日去重与结果保存
 
-## Reading and recovery
+同一目标交易日最多开始一次策略计算。数据准备通过后，使用持久化的原子占位决定能否进入生产计算；并发锁仅用于串行调度，不替代每日去重。已开始但中断的计算不能通过删除记录来强制重跑。
 
-Use the connected Supabase account to read `trade_daily.runs` (target date, run identity, status, report JSON/Markdown) and `trade_daily.events` (holiday, pre-close and preparation failures). Full evidence is retained in `runs.bundle` with its SHA-256. An authenticated runner can retrieve it through the same OIDC-protected endpoint. The Supabase Dashboard SQL editor is a private operator access point; there is no public report URL.
+结构化结果和运行原件完成一致性保存与回读校验后，发布程序只从已保存结果生成公开日报。重复执行发布会核验并复用相同文件；已有同日期文件与结果不一致时停止，不静默覆盖。写入结果不确定时先回读，确认是否已经保存，再决定是否补发。
 
-A missing calendar year, incomplete data, stale bars or unavailable private store fails closed. A reservation left `RUNNING` after a killed job requires checking that exact Actions run and preserving its state; do not delete it to force a second calculation. A failed private publication is not a successful daily scan. Source/configuration changes are disclosed, not silently called market changes.
+日报提交只修改目标日期的 Markdown 文件，并回读核对字节长度、内容摘要和文件对象标识。报告目录的更新不会重新触发策略计算。计算完成、原件保存成功和公开日报发布成功是不同状态，必须分别核验。
 
-Local focused checks: `python -m unittest discover -s tests -v` and `node --test tests/auth.test.mjs`. These check orchestration/security contracts, not strategy economics. The live deployment run separately verifies real data, production execution and private readback. Free-tier service availability and storage capacity remain operational dependencies; no paid upgrade is performed by this runner.
+## 公开范围
 
-## Source credential readiness
+公开文档只展示经允许的行情、市场与风险信号、行动、资格、目标仓位及可追溯的运行信息。所有文档使用中文；为避免误读，生产信号枚举、标准标识和必要命令保持原样。
 
-The runner requires `TRADE_READ_TOKEN` in the **Actions repository Secrets**
-of `geniusgrok/trade-cli`. A similarly named ordinary variable, a Secret in the
-private source repository, or an unbound environment Secret is not available
-to this job. The workflow checks only the presence boolean for an ordinary
-variable; it never copies, displays or uses that variable's value.
+账户资金与持仓明细、订单标识、策略源码、内部服务位置、运行诊断和原始数据不进入公开文档。发布时从结构化结果中明确选择可公开字段，并检查文档内容；不直接复制完整运行对象或自由格式的错误日志。
 
-`SOURCE_READ_SECRET_MISSING` means the actual job received no usable Secret.
-`SOURCE_TOKEN_IS_VARIABLE_NOT_SECRET` additionally identifies a same-named
-ordinary variable. Both stop before cloning or strategy calculation and
-persist a private `PREPARATION_FAILED` event. Configure the existing credential
-in the correct GitHub Actions Secret scope; never send its value in a chat or
-commit. After correction, the same formal workflow can be dispatched or its
-failed preparation retried after checking that no date reservation exists.
-Do not delete a reservation or risk state to force a second calculation.
+## 维护与验证
+
+日常维护优先检查目标日期、数据覆盖、运行状态和日报文件。数据缺失、过期或校验失败时保持失败关闭；存在旧结果时必须保留原日期、原版本和原状态。
+
+本地定向检查：
+
+```bash
+python -m unittest discover -s tests -v
+node --test tests/auth.test.mjs
+python public_report.py
+```
+
+这些检查验证运行编排、发布边界及文档内容，不等于策略收益验收。完整的实时扫描仍以实际生产运行和结果核验为准。
