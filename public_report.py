@@ -137,7 +137,7 @@ def symbol_names(report: dict) -> dict[str, str]:
 
 def with_symbol_names(value: Any, names: dict[str, str]) -> str:
     text = scalar(value)
-    return re.sub(r'(?<!\\d)(\\d{6})(?!\\d)',
+    return re.sub(r'(?<!\d)(\d{6})(?!\d)',
                   lambda match: f"{match.group(1)} {names[match.group(1)]}"
                   if match.group(1) in names else match.group(0), text)
 
