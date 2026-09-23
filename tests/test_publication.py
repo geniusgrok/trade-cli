@@ -21,7 +21,8 @@ def fixture():
                 'pending_signals': [], 'blocked_signals': []} for i in range(17)]
     return {'target_date': '2026-09-22', 'previous_trading_date': '2026-09-21',
             'data_date': '2026-09-22', 'status': 'DEGRADED', 'strategy_sha': 'a' * 40,
-            'actions_run_id': '12345', 'observation': {'market': {'summary': {'buys_suppressed': True},
+            'actions_run_id': '12345', 'observation': {'market': {'current_decision': {'leaders': {'selected_symbols': ['000000', '000016']}},
+                'summary': {'buys_suppressed': True},
                 'portfolio': {'final_assets': 999999, 'terminal_risk_lock': False}}, 'symbols': symbols},
             'comparison': {'status': '不可比较', 'changes': []}}
 
@@ -40,6 +41,7 @@ class PresentationTests(unittest.TestCase):
         self.assertIn('未提供', text)
         self.assertEqual([text.index(f"| {i:06} | 测试标的{i}") for i in range(17)],
                          sorted(text.index(f"| {i:06} | 测试标的{i}") for i in range(17)))
+        self.assertIn('000016 测试标的16', text)
         self.assertNotIn('888888', text)
         self.assertNotIn('999999', text)
 
@@ -73,6 +75,7 @@ class PresentationTests(unittest.TestCase):
         text = report.markdown(value)
         self.assertIn('观望 → BUY', text)
         self.assertNotIn('PRIVATE', text)
+        self.assertIn('000000 测试标的0', text)
         self.assertNotIn('SECRET', text)
 
     def test_invalid_or_missing_universe_refused(self):
