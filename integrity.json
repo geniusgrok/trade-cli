@@ -35,9 +35,9 @@
     "git_blob": "1a042ea6482cbf3fc674f3cd594de7ae180d585c"
   },
   "runner.py": {
-    "bytes": 13221,
-    "sha256": "b35640e53f7cc4717e9a605b5da6375052770697723d0e17c8ab17feff19a0f1",
-    "git_blob": "a63fcccf691b6118d0262845c8735c047f19b5ac"
+    "bytes": 14663,
+    "sha256": "dda2b41cc44128e3e713722924739426a63d1af5b77c0b959ec9953fdb55fe89",
+    "git_blob": "421e9c418d00fe5941e6e640f9bb10129b80f9cd"
   },
   "store/auth.mjs": {
     "bytes": 977,
@@ -73,6 +73,11 @@
     "bytes": 2608,
     "sha256": "e651b91d65210fa0ab87f10dfcfdd63fb13700deeaf5753f728abae593d30029",
     "git_blob": "6b73b2536156e6c9a99f1b2b7a7681fd1df022cd"
+  },
+  "tests/test_risk_inputs.py": {
+    "bytes": 3491,
+    "sha256": "cc144ec2dbf8cb563fe4267095e8e994372c304c303aa18a9c013869844233e4",
+    "git_blob": "6fd6a09761a7d43155285cf9f9d37f774c035d59"
   },
   "tests/test_runner.py": {
     "bytes": 5549,
