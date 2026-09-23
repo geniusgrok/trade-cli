@@ -1,4 +1,4 @@
-name: Trade Core17 private daily
+name: Trade Core17 盘后日报
 
 on:
   schedule:
@@ -6,16 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       target_date:
-        description: 'Optional completed trading date (YYYY-MM-DD); blank means Shanghai today'
+        description: '已完成收盘的交易日（YYYY-MM-DD）；留空使用北京时间当天'
         type: string
         required: false
         default: ''
   push:
     branches: [main]
-    paths: ['.github/workflows/trade-daily.yml', '*.py', 'store/**', 'tests/**']
+    paths: ['.github/workflows/trade-daily.yml', '*.py', 'store/**', 'tests/**', 'README.md', 'integrity.json']
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 concurrency:
@@ -29,28 +29,34 @@ jobs:
     env:
       TZ: Asia/Shanghai
       PYTHONUNBUFFERED: '1'
+      TARGET_DATE: ${{ inputs.target_date || '' }}
     steps:
-      - name: Checkout public orchestration only
+      - name: 获取运行编排代码
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Set Python 3.12
+      - name: 设置 Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
-      - name: Verify orchestration bytes and focused contracts
+      - name: 核验文件、运行约束和公开文档
         run: |
           python verify_integrity.py
           python -m unittest discover -s tests -v
           node --test tests/auth.test.mjs
-      - name: Verify private endpoint and workflow identity
+          python public_report.py
+      - name: 核验服务和运行身份
         run: python preflight.py
-      - name: Prepare current private main and locked environment
+      - name: 准备当前生产源码和锁定环境
+        id: source
         env:
           TRADE_READ_TOKEN: ${{ secrets.TRADE_READ_TOKEN }}
           SOURCE_TOKEN_VARIABLE_PRESENT: ${{ vars.TRADE_READ_TOKEN != '' }}
         run: python bootstrap.py
-      - name: Execute production and verify private durable readback
-        env:
-          TARGET_DATE: ${{ inputs.target_date || '' }}
+      - name: 执行生产策略并核验原件保存
         run: python runner.py
+      - name: 发布中文日报并回读核验
+        if: ${{ !cancelled() && steps.source.conclusion == 'success' }}
+        env:
+          REPORT_PUBLISH_TOKEN: ${{ github.token }}
+        run: python publish_report.py
