@@ -1,0 +1,55 @@
+name: Trade Core17 private daily
+
+on:
+  schedule:
+    - cron: '1 9 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Optional completed trading date (YYYY-MM-DD); blank means Shanghai today'
+        type: string
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths: ['.github/workflows/trade-daily.yml']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: trade-core17-production
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Shanghai
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout public orchestration only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Verify orchestration bytes and focused contracts
+        run: |
+          python verify_integrity.py
+          python -m unittest discover -s tests -v
+          node --test tests/auth.test.mjs
+      - name: Verify private endpoint and workflow identity
+        run: python preflight.py
+      - name: Prepare current private main and locked environment
+        env:
+          TRADE_READ_TOKEN: ${{ secrets.TRADE_READ_TOKEN }}
+        run: python bootstrap.py
+      - name: Execute production and verify private durable readback
+        env:
+          TARGET_DATE: ${{ inputs.target_date || '' }}
+        run: python runner.py
