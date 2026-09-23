@@ -1,8 +1,8 @@
 {
   ".github/workflows/trade-daily.yml": {
-    "bytes": 2145,
-    "git_blob": "a75c47e293d8b1a922f32a1953fb29b57adeb890",
-    "sha256": "a066119a361d2a60a490c3cdfa3436cf8a3a51c41e006b1b2d9e22d479547af0"
+    "bytes": 2017,
+    "git_blob": "caef89a883a6223ca5511b21e3bc79ab5e9e7140",
+    "sha256": "92ac3674ba561db5fa0b119430a2bcd5cbc5deb847a552d49cc2cc4c60206181"
   },
   ".gitignore": {
     "bytes": 53,
@@ -18,11 +18,6 @@
     "bytes": 3575,
     "git_blob": "ac6d241b983436aa787dbd7f3464781178e5aa58",
     "sha256": "f40a53addb36e41f353ac7e06f4f2632010e65f59c13aa6ce05d4cb3a57b6523"
-  },
-  "migrate_legacy.py": {
-    "bytes": 4300,
-    "git_blob": "4ad452ac5798aadb15f45c3b8f2fc9756b603964",
-    "sha256": "aa47b3bd7e2248a4932aba2e0bb63d1fd85a5b91c3e5ec655a7da0a2a264f615"
   },
   "preflight.py": {
     "bytes": 634,
