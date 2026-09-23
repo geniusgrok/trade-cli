@@ -52,6 +52,19 @@ def resolve_target(calendar, now: datetime, requested: str, event: str) -> tuple
     return target, previous, 'READY'
 
 
+def prepare_regime_inputs(data_dir, target: str, scan_dates: dict) -> dict:
+    """Prepare live inputs using native providers without changing strategy code."""
+    from quantfusion.data.contracts import refresh_regime_indices
+    from quantfusion.data.sessions import index_coverage
+
+    refresh = refresh_regime_indices(
+        data_dir, end_date=target, strict=True, allow_provider_fallback=True
+    )
+    # A preserved file or a successful HTTP response is not date coverage.
+    coverage = index_coverage(data_dir, scan_dates)
+    return {'refresh': refresh, 'coverage': coverage}
+
+
 def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dict:
     target = ctx.request.end_date
     if native.get('status') != 'ok' or native.get('mode') != 'simulation' or native.get('scan_date') != target or native.get('run_id') != ctx.run_id:
@@ -132,6 +145,10 @@ def run() -> tuple[int, str]:
             profile = {'start_date': start, 'capital': args.capital, 'config_fingerprint': ctx.config_fingerprint,
                        'universe': [[code, name] for code, name in symbols.items()]}
             report['profile'] = profile
+            # Refresh after restoring prior evidence, before reserving computation.
+            report['phase'] = 'INDEX_PREPARATION'
+            report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
+            report['phase'] = 'NATIVE_PREPARATION'
             # Reuse all native preparation/validation, before consuming the one calculation.
             if not prepare_scan(ctx, load_prev_risk_state) or not probe_market(ctx) or not freeze_scan(ctx):
                 raise ValueError('NATIVE_PREPARATION_FAILED')
