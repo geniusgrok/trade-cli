@@ -127,6 +127,21 @@ def intents(values: Any) -> str:
     return ' / '.join(row or '存在记录，未提供可公开的行动字段' for row in rows) if rows else '无记录'
 
 
+
+def symbol_names(report: dict) -> dict[str, str]:
+    items = get(report, 'observation.symbols') or []
+    return {item['code']: item['name'] for item in items
+            if isinstance(item, dict) and isinstance(item.get('code'), str)
+            and isinstance(item.get('name'), str) and item['name']}
+
+
+def with_symbol_names(value: Any, names: dict[str, str]) -> str:
+    text = scalar(value)
+    return re.sub(r'(?<!\\d)(\\d{6})(?!\\d)',
+                  lambda match: f"{match.group(1)} {names[match.group(1)]}"
+                  if match.group(1) in names else match.group(0), text)
+
+
 def changes(report: dict) -> list[str]:
     comparison = report.get('comparison') or {}
     if comparison.get('status') == '不可比较':
@@ -149,7 +164,8 @@ def changes(report: dict) -> list[str]:
         fmt = formats.get(path, scalar)
         old, new = fmt(change.get('yesterday')), fmt(change.get('today'))
         if old != new:
-            result.append(f'{labels[path]}：{old} → {new}')
+            names = symbol_names(report)
+            result.append(f'{with_symbol_names(labels[path], names)}：{with_symbol_names(old, names)} → {with_symbol_names(new, names)}')
     return result
 
 
@@ -191,8 +207,12 @@ def markdown(report: dict) -> str:
         if len(codes) != 17 or len(set(codes)) != 17 or any(not re.fullmatch(r'\d{6}', c) for c in codes):
             raise ValueError('PUBLIC_CORE17_COVERAGE')
         out.extend(['', '## 市场状态与市场风险', '', '| 项目 | 生产输出 |', '|---|---|'])
+        names = symbol_names(report)
+        if set(names) != set(codes):
+            raise ValueError('PUBLIC_CORE17_NAMES')
         for path, label in MARKET.items():
-            out.append(f'| {label} | {scalar(get(observation.get("market"), path))} |')
+            value = with_symbol_names(get(observation.get("market"), path), names)
+            out.append(f'| {label} | {value} |')
         out.extend(['', '独立风险意见与最终买入限制须结合阅读；风险等级为零不等于允许买入。', '',
                     '## Core17 全部标的（生产顺序）', '',
                     '| 代码 | 名称 | 行情日期 | 前复权收盘价 | 行动信号 | 资格 | 目标仓位 | 风险等级 |',
