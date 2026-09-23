@@ -16,7 +16,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write # 临时迁移旧状态后移除
 
 concurrency:
   group: trade-core17-production
@@ -43,8 +42,6 @@ jobs:
           python-version: '3.12'
       - name: 安装状态加密依赖
         run: python -m pip install 'cryptography==46.0.0'
-      - name: 迁移已有连续状态
-        run: python migrate_legacy.py
       - name: 核验文件、运行约束和公开文档
         run: |
           python verify_integrity.py
