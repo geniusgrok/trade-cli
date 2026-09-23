@@ -30,9 +30,9 @@
     "sha256": "2d6cbfbfd1fa7104d4a3802cc6e44ee0178aec776c1bc0f0eac72f19eca525a6"
   },
   "public_report.py": {
-    "bytes": 12121,
-    "git_blob": "399e75659ce18ac8fb7bc38d7bd171aa0171a8e2",
-    "sha256": "a60cb026cc8326335b2205aac08c044e89217201cc50103834a6a4e8855a5366"
+    "bytes": 13000,
+    "git_blob": "e6b0ca8661a867e9bdd59317c189f67c9523b1d2",
+    "sha256": "af9655c224f27899d5d6261f2b48a79d23d87177dc8e3a6081e33ecfe27caada"
   },
   "publish_report.py": {
     "bytes": 6348,
@@ -85,9 +85,9 @@
     "sha256": "e651b91d65210fa0ab87f10dfcfdd63fb13700deeaf5753f728abae593d30029"
   },
   "tests/test_publication.py": {
-    "bytes": 7975,
-    "git_blob": "9391c7051222c3ee4a101d5183072103402460a2",
-    "sha256": "b6f8f3753ffcead0fa209e3ad4b189bd8b7f24768b9c82cce847f86fe347e9de"
+    "bytes": 8080,
+    "git_blob": "53acf805bbcd08ff040ffe0b0f19691af407fb23",
+    "sha256": "4ce344f4bcaf9a274d0404a792ae3642ce2b9a6a40ffe2d4ad734047543b5054"
   },
   "tests/test_publication_entry.py": {
     "bytes": 2001,
