@@ -12,11 +12,11 @@ on:
         default: ''
   push:
     branches: [main]
-    paths: ['.github/workflows/trade-daily.yml', '*.py', 'store/**', 'tests/**', 'README.md', 'integrity.json']
+    paths: ['.github/workflows/trade-daily.yml', '*.py', 'tests/**', 'README.md', 'integrity.json']
 
 permissions:
   contents: write
-  id-token: write
+  id-token: write # 临时迁移旧状态后移除
 
 concurrency:
   group: trade-core17-production
@@ -30,6 +30,8 @@ jobs:
       TZ: Asia/Shanghai
       PYTHONUNBUFFERED: '1'
       TARGET_DATE: ${{ inputs.target_date || '' }}
+      REPORT_PUBLISH_TOKEN: ${{ github.token }}
+      STATE_SEAL_KEY: ${{ secrets.TRADE_READ_TOKEN }}
     steps:
       - name: 获取运行编排代码
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -39,13 +41,16 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
+      - name: 安装状态加密依赖
+        run: python -m pip install 'cryptography==46.0.0'
+      - name: 迁移已有连续状态
+        run: python migrate_legacy.py
       - name: 核验文件、运行约束和公开文档
         run: |
           python verify_integrity.py
           python -m unittest discover -s tests -v
-          node --test tests/auth.test.mjs
           python public_report.py
-      - name: 核验服务和运行身份
+      - name: 核验状态分支和加密密钥
         run: python preflight.py
       - name: 准备当前生产源码和锁定环境
         id: source
@@ -57,6 +62,4 @@ jobs:
         run: python runner.py
       - name: 发布中文日报并回读核验
         if: ${{ !cancelled() && steps.source.conclusion == 'success' }}
-        env:
-          REPORT_PUBLISH_TOKEN: ${{ github.token }}
         run: python publish_report.py

@@ -33,6 +33,18 @@ class CalendarTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_public_branch_state_is_authenticated_and_path_bound(self):
+        with patch.dict('os.environ', {'STATE_SEAL_KEY': 's' * 40}):
+            value = {'status': 'RUNNING', 'run_id': '123'}
+            sealed = store._seal(value, 'runs/2026-09-22.json.enc')
+            self.assertEqual(store._open(sealed, 'runs/2026-09-22.json.enc'), value)
+            self.assertNotIn(b'RUNNING', sealed)
+            with self.assertRaises(ValueError):
+                store._open(sealed, 'runs/2026-09-23.json.enc')
+            tampered = sealed[:-1] + bytes([sealed[-1] ^ 1])
+            with self.assertRaises(ValueError):
+                store._open(tampered, 'runs/2026-09-22.json.enc')
+
     def test_exact_bundle_roundtrip_and_restore_allowlist(self):
         with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as e:
             root=Path(d)

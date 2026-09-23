@@ -1,35 +1,20 @@
-"""Reject anonymous/forged callers and verify the real workflow identity."""
-from datetime import datetime
-import urllib.error
-import re
-import urllib.request
-from zoneinfo import ZoneInfo
+"""Fail before production if state cannot be read or authenticated."""
 import private_store as store
 
 
 def main() -> None:
-    for token in (None, 'not-a-valid.signed-token.signature'):
-        headers = {'Content-Type': 'application/json'}
-        if token:
-            headers['Authorization'] = 'Bearer ' + token
-        try:
-            with urllib.request.urlopen(urllib.request.Request(store.ENDPOINT + '/context', data=b'{}', headers=headers), timeout=60):
-                raise RuntimeError('UNAUTHORIZED_REQUEST_ACCEPTED')
-        except urllib.error.HTTPError as exc:
-            if exc.code != 401:
-                raise RuntimeError(f'AUTH_DENIAL_HTTP_{exc.code}') from None
-    print('ANONYMOUS_AND_FORGED_TOKEN_DENIED')
-    today = datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
-    response = store.request('context', {'date': today, 'compare_date': None})
-    if not isinstance(response, dict) or set(response) != {'existing', 'previous', 'comparison'}:
-        raise RuntimeError('PRIVATE_STORE_NOT_READY')
-    print('ANONYMOUS_AND_FORGED_TOKEN_DENIED; WORKFLOW_OIDC_VERIFIED')
+    store._key()
+    head, _, files = store._snapshot()
+    if not head or not isinstance(files, dict):
+        raise ValueError('STATE_BRANCH_UNAVAILABLE')
+    for path in sorted(p for p in files if p.startswith('runs/') and p.endswith('.json.enc'))[-2:]:
+        store._read(path, files)
+    print('STATE_BRANCH_AND_ENCRYPTION_VERIFIED')
 
 
 if __name__ == '__main__':
     try:
         main()
-    except Exception as exc:
-        safe = str(exc) if re.fullmatch('[A-Z_0-9]{3,100}', str(exc)) else 'PRIVATE_STORE_AUTH_OR_AVAILABILITY'
-        print('BLOCKED: ' + safe)
-        raise SystemExit(1)
+    except Exception:
+        print('BLOCKED: STATE_BRANCH_OR_KEY_UNAVAILABLE')
+        raise SystemExit(1) from None

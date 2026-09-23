@@ -1,8 +1,8 @@
 {
   ".github/workflows/trade-daily.yml": {
-    "bytes": 1948,
-    "git_blob": "6e6975eee94e4e4982064114ead83cc92ad8d67f",
-    "sha256": "5acf1c1d2bc640402975a6f7874e5b4e62e3d4a1aa81cce477f4130b115100c9"
+    "bytes": 2145,
+    "git_blob": "a75c47e293d8b1a922f32a1953fb29b57adeb890",
+    "sha256": "a066119a361d2a60a490c3cdfa3436cf8a3a51c41e006b1b2d9e22d479547af0"
   },
   ".gitignore": {
     "bytes": 53,
@@ -10,24 +10,29 @@
     "sha256": "25458055814c6879f590d21a27a5a29e34fddbb5a0eecce2dab53b110525ed20"
   },
   "README.md": {
-    "bytes": 3714,
-    "git_blob": "5af92eac018821aa8e2669542fb02db0604d44b4",
-    "sha256": "0f0d2ab88b5433e9df79461d358486a6e4b189f0a3e1ea9ec14547255a908a20"
+    "bytes": 4052,
+    "git_blob": "14c7d27c752a451220d4fbb1300394c580013d6d",
+    "sha256": "793ddc35760852d0bef8bd5a7fa5156fd6c265b16f88f2cc189c6283d1031b44"
   },
   "bootstrap.py": {
     "bytes": 3575,
     "git_blob": "ac6d241b983436aa787dbd7f3464781178e5aa58",
     "sha256": "f40a53addb36e41f353ac7e06f4f2632010e65f59c13aa6ce05d4cb3a57b6523"
   },
+  "migrate_legacy.py": {
+    "bytes": 4300,
+    "git_blob": "4ad452ac5798aadb15f45c3b8f2fc9756b603964",
+    "sha256": "aa47b3bd7e2248a4932aba2e0bb63d1fd85a5b91c3e5ec655a7da0a2a264f615"
+  },
   "preflight.py": {
-    "bytes": 1481,
-    "git_blob": "f9613a5b6503463e3c3ff3481ff913f6ade8aa8a",
-    "sha256": "e7c99cddffb0c14fef3da4e2c1ff147f0853ad99ceb8d962c478cc1d9742a36f"
+    "bytes": 634,
+    "git_blob": "de627f21dbfaa339fb9200462a724e57c9568dd2",
+    "sha256": "9c1e609276cf6c7d2b3b880ecad80c675cdfceedb1bf4f8f77f3527f826f30ba"
   },
   "private_store.py": {
-    "bytes": 5901,
-    "git_blob": "2e04cc753e8b354480e769d4202b6363e3428b50",
-    "sha256": "2d6cbfbfd1fa7104d4a3802cc6e44ee0178aec776c1bc0f0eac72f19eca525a6"
+    "bytes": 12518,
+    "git_blob": "0babab258b7fbe959a299548b56ef5cc6ae84171",
+    "sha256": "ce938e3675ba943f9562a746b49140c711255197f4e15e2e839cd3eb008e2387"
   },
   "public_report.py": {
     "bytes": 13000,
@@ -35,9 +40,9 @@
     "sha256": "af9655c224f27899d5d6261f2b48a79d23d87177dc8e3a6081e33ecfe27caada"
   },
   "publish_report.py": {
-    "bytes": 6348,
-    "git_blob": "a3cc531f40f862c3877a04c287f005a0d1f65b21",
-    "sha256": "8f49e662c60f25112b5a55cb3dd9e28dbfeee81d27978b1b95464fad0c5a73b8"
+    "bytes": 6371,
+    "git_blob": "bc407370eb766944cc657c6535483e75a56ccc7f",
+    "sha256": "55af65cb193fc9f46a874a98a3181235df0938c54afe6dfb5e6d42852ceb5040"
   },
   "report.py": {
     "bytes": 6241,
@@ -48,31 +53,6 @@
     "bytes": 14663,
     "git_blob": "421e9c418d00fe5941e6e640f9bb10129b80f9cd",
     "sha256": "dda2b41cc44128e3e713722924739426a63d1af5b77c0b959ec9953fdb55fe89"
-  },
-  "store/auth.mjs": {
-    "bytes": 977,
-    "git_blob": "bb58b397b2be788f98abcb2c197ee11f35dea428",
-    "sha256": "93dd36d7d564cc0a4bac966cc836b5f673157a56b3596fe4b9e18142987a0bd6"
-  },
-  "store/deno.json": {
-    "bytes": 75,
-    "git_blob": "5f5cc611878f86629fc94593f072459b442df36e",
-    "sha256": "954fc0c4ef3cbe4887d4aa2491c4582036706cb9527521c712702c0d5574e97c"
-  },
-  "store/index.ts": {
-    "bytes": 4786,
-    "git_blob": "36f94841bd8c0eb73c918bac9a2b3e8de47bca87",
-    "sha256": "ce78ebc38541b37573421d18c20d98a4d6a30dc77ae66eda1fa498a4173f79cf"
-  },
-  "store/schema.sql": {
-    "bytes": 7031,
-    "git_blob": "7198e1729fff99588a3301be83863d0002d9525e",
-    "sha256": "4366b992c49a0023307cabc549b29a8a3bef14a09a4c6ab9ddfce9e4a8659218"
-  },
-  "tests/auth.test.mjs": {
-    "bytes": 1199,
-    "git_blob": "791afa03f03d1a892ec131eb186c755ec5f5c3a4",
-    "sha256": "711df1525351cac9d5776df7ad7bee0df912937263a80e28044987ff00d9f6b8"
   },
   "tests/test_bootstrap.py": {
     "bytes": 2017,
@@ -100,9 +80,9 @@
     "sha256": "cc144ec2dbf8cb563fe4267095e8e994372c304c303aa18a9c013869844233e4"
   },
   "tests/test_runner.py": {
-    "bytes": 5549,
-    "git_blob": "772760673290dc27de563a0a59874dc706a8ab8b",
-    "sha256": "45ad633b1738cdb88b2702d8707266a362df07d567baf00c191d9b66bcb6df8d"
+    "bytes": 6239,
+    "git_blob": "125fb42cd2b580a604a578017c3c947250d060f1",
+    "sha256": "17ad663ffc8b565675e8f0c30972739b3943685389bb5dd535a574946e3ef981"
   },
   "verify_integrity.py": {
     "bytes": 772,
