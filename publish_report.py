@@ -26,7 +26,7 @@ def blob_id(data: bytes) -> str:
     return hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
 
 
-def api(method: str, path: str, body: dict | None = None) -> dict | None:
+def api(method: str, path: str, body: dict | None = None, *, limit: int = 2_000_000) -> dict | None:
     data = None if body is None else json.dumps(body, ensure_ascii=False).encode()
     request = urllib.request.Request(API + path, data=data, method=method, headers={
         'Authorization': 'Bearer ' + os.environ['REPORT_PUBLISH_TOKEN'],
@@ -35,8 +35,8 @@ def api(method: str, path: str, body: dict | None = None) -> dict | None:
     })
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read(2_000_001)
-        if len(raw) > 2_000_000:
+            raw = response.read(limit + 1)
+        if len(raw) > limit:
             raise ValueError('PUBLIC_RESPONSE_TOO_LARGE')
         return json.loads(raw)
     except urllib.error.HTTPError as exc:
