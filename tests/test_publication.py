@@ -40,7 +40,8 @@ class PresentationTests(unittest.TestCase):
         self.assertIn('未提供', text)
         self.assertEqual([text.index(f"| {i:06} | 测试标的{i}") for i in range(17)],
                          sorted(text.index(f"| {i:06} | 测试标的{i}") for i in range(17)))
-        self.assertIn('688498 测试标的16', text)\n        self.assertNotIn('888888', text)
+        self.assertIn('688498 测试标的16', text)
+        self.assertNotIn('888888', text)
         self.assertNotIn('999999', text)
 
     def test_private_fields_and_nested_intent_details_are_excluded(self):
@@ -72,7 +73,8 @@ class PresentationTests(unittest.TestCase):
             {'field': '000000.native.signal', 'yesterday': '观望', 'today': 'BUY'}]}
         text = report.markdown(value)
         self.assertIn('观望 → BUY', text)
-        self.assertNotIn('PRIVATE', text)\n        self.assertIn('000000 测试标的0', text)
+        self.assertNotIn('PRIVATE', text)
+        self.assertIn('000000 测试标的0', text)
         self.assertNotIn('SECRET', text)
 
     def test_invalid_or_missing_universe_refused(self):
