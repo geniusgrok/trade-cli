@@ -35,9 +35,9 @@
     "sha256": "a60cb026cc8326335b2205aac08c044e89217201cc50103834a6a4e8855a5366"
   },
   "publish_report.py": {
-    "bytes": 6294,
-    "git_blob": "4497b9c2865737682c2f30dbdf4f5eee8a0684ff",
-    "sha256": "bb0301fc4b9449c8dc43090f040ce39c5efbd27ae28815221424b53ac21eefa0"
+    "bytes": 6348,
+    "git_blob": "a3cc531f40f862c3877a04c287f005a0d1f65b21",
+    "sha256": "8f49e662c60f25112b5a55cb3dd9e28dbfeee81d27978b1b95464fad0c5a73b8"
   },
   "report.py": {
     "bytes": 6241,
@@ -88,6 +88,11 @@
     "bytes": 7975,
     "git_blob": "9391c7051222c3ee4a101d5183072103402460a2",
     "sha256": "b6f8f3753ffcead0fa209e3ad4b189bd8b7f24768b9c82cce847f86fe347e9de"
+  },
+  "tests/test_publication_entry.py": {
+    "bytes": 2001,
+    "git_blob": "0ee8a2336990efd7f5ecc16081be3dee02f942b5",
+    "sha256": "1324ba2addf2e5fc96806a71d9eb28071ec3fa1cc32c3f0b9f02561f330dfccb"
   },
   "tests/test_risk_inputs.py": {
     "bytes": 3491,
