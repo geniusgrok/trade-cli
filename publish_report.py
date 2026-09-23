@@ -136,7 +136,8 @@ def main() -> None:
     bundle = store.decode_bundle(saved['bundle'], saved['sha256'])
     report = verified_report(saved, target, bundle)
     proof = publish(target, markdown(report))
-    store.request('event', {'date': target, 'status': 'PUBLIC_REPORT_VERIFIED', 'details': proof})
+    # The verified public Git commit is the publication receipt, not a new store event.
+    print(json.dumps(proof, ensure_ascii=False, sort_keys=True))
     print('中文日报已保存并完成内容回读核验：' + proof['path'])
 
 
