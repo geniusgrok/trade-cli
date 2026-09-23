@@ -2,7 +2,7 @@
 from __future__ import annotations
 import bisect
 import contextlib
-from datetime import datetime, time
+from datetime import date, datetime, time, timedelta
 import importlib.metadata
 import json
 import os
@@ -63,6 +63,31 @@ def prepare_regime_inputs(data_dir, target: str, scan_dates: dict) -> dict:
     # A preserved file or a successful HTTP response is not date coverage.
     coverage = index_coverage(data_dir, scan_dates)
     return {'refresh': refresh, 'coverage': coverage}
+
+
+def prepare_risk_inputs(ctx) -> dict:
+    """Include the native independent risk basket in the immutable input snapshot."""
+    from quantfusion.config.overlay import RISK_BASKET
+    from quantfusion.data.providers import DataFetcher
+    from quantfusion.data.sessions import require_frame_coverage
+
+    start = (date.fromisoformat(ctx.request.start_date) - timedelta(days=400)).isoformat()
+    additions, evidence_dates = {}, {}
+    for code in RISK_BASKET:
+        frame = ctx.snapshot_frames.get(code)
+        if frame is None:
+            frame = DataFetcher.load_stock_data(
+                code, start, ctx.request.end_date,
+                data_dir=None, cache_dir=ctx.request.cache_dir
+            )
+            additions[code] = frame
+        if frame is None or frame.empty or frame.attrs.get('_stale', False):
+            raise ValueError('RISK_INPUT_UNAVAILABLE:' + code)
+        evidence_dates[code] = require_frame_coverage(frame, ctx.scan_dates, code)
+    # Do not expand ctx.symbols or ctx.tradable: these are evidence, not candidates.
+    ctx.snapshot_frames.update({code: frame.copy() for code, frame in additions.items()})
+    ctx.actual_evidence_dates.update(evidence_dates)
+    return evidence_dates
 
 
 def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dict:
@@ -150,8 +175,12 @@ def run() -> tuple[int, str]:
             report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
             report['phase'] = 'NATIVE_PREPARATION'
             # Reuse all native preparation/validation, before consuming the one calculation.
-            if not prepare_scan(ctx, load_prev_risk_state) or not probe_market(ctx) or not freeze_scan(ctx):
+            if not prepare_scan(ctx, load_prev_risk_state) or not probe_market(ctx):
                 raise ValueError('NATIVE_PREPARATION_FAILED')
+            report['phase'] = 'RISK_INPUT_PREPARATION'
+            report['risk_input_evidence_dates'] = prepare_risk_inputs(ctx)
+            if not freeze_scan(ctx):
+                raise ValueError('NATIVE_SNAPSHOT_FAILED')
             receipt = store.request('start', {'date': target, 'strategy_sha': ident['strategy_sha'],
                                              'previous_date': previous['date'] if previous else None})
             if not receipt.get('started'):
