@@ -16,7 +16,18 @@ def main() -> int:
     logs = runtime / 'logs'; logs.mkdir(parents=True, exist_ok=True)
     token = os.environ.get('TRADE_READ_TOKEN', '')
     if not token:
-        print('BLOCKED: SOURCE_READ_SECRET_MISSING')
+        # Inspect only a boolean supplied by Actions, never a variable's value.
+        variable_only = os.environ.get('SOURCE_TOKEN_VARIABLE_PRESENT', '').lower() == 'true'
+        reason = 'SOURCE_TOKEN_IS_VARIABLE_NOT_SECRET' if variable_only else 'SOURCE_READ_SECRET_MISSING'
+        try:
+            store.request('event', {
+                'date': datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat(),
+                'status': 'PREPARATION_FAILED',
+                'details': {'phase': 'SOURCE_CREDENTIAL', 'error': reason,
+                            'strategy_calculation_started': False}})
+        except Exception:
+            print('PRIVATE_FAILURE_RECORD_UNAVAILABLE')
+        print('BLOCKED: ' + reason)
         return 1
     if sys.version_info[:2] != (3, 12):
         print('BLOCKED: PYTHON_312_REQUIRED')

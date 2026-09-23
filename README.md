@@ -25,3 +25,20 @@ Use the connected Supabase account to read `trade_daily.runs` (target date, run 
 A missing calendar year, incomplete data, stale bars or unavailable private store fails closed. A reservation left `RUNNING` after a killed job requires checking that exact Actions run and preserving its state; do not delete it to force a second calculation. A failed private publication is not a successful daily scan. Source/configuration changes are disclosed, not silently called market changes.
 
 Local focused checks: `python -m unittest discover -s tests -v` and `node --test tests/auth.test.mjs`. These check orchestration/security contracts, not strategy economics. The live deployment run separately verifies real data, production execution and private readback. Free-tier service availability and storage capacity remain operational dependencies; no paid upgrade is performed by this runner.
+
+## Source credential readiness
+
+The runner requires `TRADE_READ_TOKEN` in the **Actions repository Secrets**
+of `geniusgrok/trade-cli`. A similarly named ordinary variable, a Secret in the
+private source repository, or an unbound environment Secret is not available
+to this job. The workflow checks only the presence boolean for an ordinary
+variable; it never copies, displays or uses that variable's value.
+
+`SOURCE_READ_SECRET_MISSING` means the actual job received no usable Secret.
+`SOURCE_TOKEN_IS_VARIABLE_NOT_SECRET` additionally identifies a same-named
+ordinary variable. Both stop before cloning or strategy calculation and
+persist a private `PREPARATION_FAILED` event. Configure the existing credential
+in the correct GitHub Actions Secret scope; never send its value in a chat or
+commit. After correction, the same formal workflow can be dispatched or its
+failed preparation retried after checking that no date reservation exists.
+Do not delete a reservation or risk state to force a second calculation.
