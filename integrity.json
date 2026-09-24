@@ -1,8 +1,8 @@
 {
   ".github/workflows/trade-daily.yml": {
     "bytes": 2019,
-    "git_blob": "1687a70868f88a3a5501486d41545f64bc7779e9",
-    "sha256": "bcedc9801cce6d42e37abc46eb0e148c7d4b8e0dad09d843b6084a84b57d9bd9"
+    "git_blob": "2125546fefae47922e9bf5bdd5b09332a994966f",
+    "sha256": "e9c1f61937b27b532375c73c9f9d7cc52f1a6f361c2287cfdd14821477393e30"
   },
   ".gitignore": {
     "bytes": 53,
@@ -11,8 +11,8 @@
   },
   "README.md": {
     "bytes": 4684,
-    "git_blob": "713ff8f6281764c13c704fa2328b87178744fb26",
-    "sha256": "6f29217af8776676189a63523cc1dc8faf5803658d66d0a24b1b706e082312aa"
+    "git_blob": "5058add9acebe8cddd14760f2531641eb0110807",
+    "sha256": "d50aa29b5dd015aad3a814ba8994dc98b42adee93a9bef53006a3ef5ca4340f9"
   },
   "bootstrap.py": {
     "bytes": 3575,
