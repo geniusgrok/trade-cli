@@ -44,4 +44,16 @@ jobs:
           print('PREVIOUS_FAILURE_CODE=' + code)
           classes = re.findall(r'(?m)^([\w.]+(?:Error|Exception)):', details.get('log_tail', ''))
           print('PREVIOUS_FAILURE_EXCEPTION=' + (classes[-1] if classes and re.fullmatch(r'[A-Za-z.]+(?:Error|Exception)', classes[-1]) else 'UNKNOWN'))
+          tail = details.get('log_tail', '')
+          kinds = {'RISK_STATE': '风险状态文件损坏',
+                   'INDEX_COVERAGE': '指数证据不完整',
+                   'MARKET_DATA': '必需交易或参考标的数据失败',
+                   'STALE_DATA': 'PROVIDER_STALE_OR_AGE',
+                   'NO_TRADABLE': '没有可交易的标的'}
+          print('NATIVE_FAILURE_KIND=' + ','.join(k for k, marker in kinds.items() if marker in tail))
+          symbols = sorted(set(re.findall(r'[✗⚠]\s*(\d{6})\b', tail)))
+          print('FAILED_SYMBOL_CODES=' + ','.join(symbols))
+          evidence = ('TRADING_DAY_COVERAGE', 'INDEX_EVIDENCE_UNAVAILABLE',
+                      'MARKET_DATA_MISSING', 'INVALID_EVIDENCE_DATE')
+          print('COVERAGE_CODES=' + ','.join(code for code in evidence if code in tail))
           PY
