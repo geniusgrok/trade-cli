@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time as clock
 import traceback
 from zoneinfo import ZoneInfo
 
@@ -90,6 +91,27 @@ def prepare_risk_inputs(ctx) -> dict:
     return evidence_dates
 
 
+def prepare_native_with_retry(build_context, load_risk, log, prepare, probe, pause=clock.sleep):
+    """Wait for delayed same-session bars before reserving the one daily replay."""
+    for attempt in range(3):
+        ctx = build_context()  # A failed probe may have partially populated its context.
+        if not prepare(ctx, load_risk):
+            break
+        log.flush()
+        start = log.tell()
+        if probe(ctx):
+            return ctx
+        log.flush()
+        with Path(log.name).open('rb') as evidence:
+            evidence.seek(start)
+            coverage_pending = b'TRADING_DAY_COVERAGE' in evidence.read()
+        if not coverage_pending or attempt == 2:
+            break
+        print('  当日行情覆盖尚未齐全，等待 10 分钟重新取数。')
+        pause(600)
+    raise ValueError('NATIVE_PREPARATION_FAILED')
+
+
 def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dict:
     target = ctx.request.end_date
     if native.get('status') != 'ok' or native.get('mode') != 'simulation' or native.get('scan_date') != target or native.get('run_id') != ctx.run_id:
@@ -166,7 +188,10 @@ def run() -> tuple[int, str]:
                 '--capital', str(capital), '--cache-dir', str(root / 'cache'),
                 '--regime-data-dir', str(root / 'regime'), '--output-dir', str(output)])
             dates = resolve_scan_dates(target)
-            ctx = ScanContext(ScanRequest.from_args(args, start, target, args.capital), symbols, dates)
+            def build_context():
+                return ScanContext(ScanRequest.from_args(args, start, target, args.capital), symbols, dates)
+
+            ctx = build_context()
             profile = {'start_date': start, 'capital': args.capital, 'config_fingerprint': ctx.config_fingerprint,
                        'universe': [[code, name] for code, name in symbols.items()]}
             report['profile'] = profile
@@ -175,8 +200,8 @@ def run() -> tuple[int, str]:
             report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
             report['phase'] = 'NATIVE_PREPARATION'
             # Reuse all native preparation/validation, before consuming the one calculation.
-            if not prepare_scan(ctx, load_prev_risk_state) or not probe_market(ctx):
-                raise ValueError('NATIVE_PREPARATION_FAILED')
+            ctx = prepare_native_with_retry(build_context, load_prev_risk_state, log,
+                                            prepare_scan, probe_market)
             report['phase'] = 'RISK_INPUT_PREPARATION'
             report['risk_input_evidence_dates'] = prepare_risk_inputs(ctx)
             if not freeze_scan(ctx):

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import private_store as store
 import report
-from runner import resolve_target
+from runner import prepare_native_with_retry, resolve_target
 
 
 class CalendarTests(unittest.TestCase):
@@ -30,6 +30,40 @@ class CalendarTests(unittest.TestCase):
     def test_holiday_returns_actual_latest_session(self):
         now=datetime(2026,9,25,17,1,tzinfo=ZoneInfo('Asia/Shanghai'))
         self.assertEqual(resolve_target(self.calendar,now,'','schedule'),('2026-09-25','2026-09-24','HOLIDAY'))
+
+
+class NativePreparationRetryTests(unittest.TestCase):
+    def test_delayed_bar_rebuilds_context_before_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            contexts, waits = [], []
+            def build():
+                ctx = object()
+                contexts.append(ctx)
+                return ctx
+            def probe(ctx):
+                if len(contexts) == 1:
+                    print('TRADING_DAY_COVERAGE:300308', file=log)
+                    return False
+                return True
+            with (Path(directory) / 'native.log').open('w', encoding='utf-8') as log:
+                result = prepare_native_with_retry(build, None, log,
+                    lambda ctx, load: True, probe, waits.append)
+            self.assertIs(result, contexts[1])
+            self.assertEqual(len(contexts), 2)
+            self.assertEqual(waits, [600])
+
+    def test_other_failure_does_not_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            contexts, waits = [], []
+            def probe(ctx):
+                print('risk state validation failed', file=log)
+                return False
+            with (Path(directory) / 'native.log').open('w', encoding='utf-8') as log:
+                with self.assertRaisesRegex(ValueError, 'NATIVE_PREPARATION_FAILED'):
+                    prepare_native_with_retry(lambda: contexts.append(object()), None,
+                        log, lambda ctx, load: True, probe, waits.append)
+            self.assertEqual(len(contexts), 1)
+            self.assertEqual(waits, [])
 
 
 class EvidenceTests(unittest.TestCase):
