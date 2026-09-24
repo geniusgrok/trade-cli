@@ -2,7 +2,7 @@ name: Trade Core17 盘后日报
 
 on:
   schedule:
-    - cron: '36 8,11 * * 1-5'
+    - cron: '6 9,12 * * 1-5'
   workflow_dispatch:
     inputs:
       target_date:
