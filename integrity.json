@@ -1,13 +1,8 @@
 {
-  ".github/workflows/diagnose-20260924.yml": {
-    "bytes": 2745,
-    "git_blob": "6748619b760a33ee8f61ab6a1265d594d61d04c1",
-    "sha256": "c68d7f0b32e6a4c90b184e0401d2a0bd7e7597c8e8afb4d2991b950498a8a08b"
-  },
   ".github/workflows/trade-daily.yml": {
-    "bytes": 3304,
-    "git_blob": "b12d40d2ac604f3985364d3df0f04210fbfa36ab",
-    "sha256": "d4cec7d4c2a485b2953c28eda764e9949f24fb5f575def259bb74bfa1eb1d318"
+    "bytes": 2020,
+    "git_blob": "ac239f278ebdf161d958a6191fae4092ff6c4d51",
+    "sha256": "52defdcb0288b40ea994bbfca6c48aa15bfdfbc0967b822f051fc0cb1833bdb0"
   },
   ".gitignore": {
     "bytes": 53,
@@ -15,9 +10,9 @@
     "sha256": "25458055814c6879f590d21a27a5a29e34fddbb5a0eecce2dab53b110525ed20"
   },
   "README.md": {
-    "bytes": 4052,
-    "git_blob": "14c7d27c752a451220d4fbb1300394c580013d6d",
-    "sha256": "793ddc35760852d0bef8bd5a7fa5156fd6c265b16f88f2cc189c6283d1031b44"
+    "bytes": 4329,
+    "git_blob": "e431eeb8a023017008e2ca53be5fc0994e011dc8",
+    "sha256": "e43ab95d0c4f7c24aa0aeb762b8fdbb77ed0b59cdd6973c6daf8b6b43af51ea3"
   },
   "bootstrap.py": {
     "bytes": 3575,
@@ -50,9 +45,9 @@
     "sha256": "e7b03a5c766fa749fb9faa8491de360583886cc5c9f9b558e871a6786cc12b5b"
   },
   "runner.py": {
-    "bytes": 14663,
-    "git_blob": "421e9c418d00fe5941e6e640f9bb10129b80f9cd",
-    "sha256": "dda2b41cc44128e3e713722924739426a63d1af5b77c0b959ec9953fdb55fe89"
+    "bytes": 15620,
+    "git_blob": "960e12adea1087583e605dba575b78f7e2e61577",
+    "sha256": "7375f3a3821b65e24018ff7ce4e7de29eddd73cb7af3d63c50681da3227a8c86"
   },
   "tests/test_bootstrap.py": {
     "bytes": 2017,
@@ -80,9 +75,9 @@
     "sha256": "cc144ec2dbf8cb563fe4267095e8e994372c304c303aa18a9c013869844233e4"
   },
   "tests/test_runner.py": {
-    "bytes": 6239,
-    "git_blob": "125fb42cd2b580a604a578017c3c947250d060f1",
-    "sha256": "17ad663ffc8b565675e8f0c30972739b3943685389bb5dd535a574946e3ef981"
+    "bytes": 7836,
+    "git_blob": "a5c70726146331de7667acc436824212411be823",
+    "sha256": "1e7db8b0f161e0a81982426c54e34ca1bd010fa2bcc625cc68a629fb3165162c"
   },
   "verify_integrity.py": {
     "bytes": 772,

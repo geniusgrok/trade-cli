@@ -2,7 +2,7 @@ name: Trade Core17 盘后日报
 
 on:
   schedule:
-    - cron: '36 8 * * 1-5'
+    - cron: '36 8,11 * * 1-5'
   workflow_dispatch:
     inputs:
       target_date:
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   daily:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       TZ: Asia/Shanghai
       PYTHONUNBUFFERED: '1'
@@ -49,29 +49,6 @@ jobs:
           python public_report.py
       - name: 核验状态分支和加密密钥
         run: python preflight.py
-      - name: 读取上次失败的安全诊断
-        run: |
-          python - <<'PY'
-          import re
-          from private_store import _read, _snapshot
-
-          path = 'events/2026-09-24/35976902365-1-PREPARATION_FAILED.json.enc'
-          record = _read(path, _snapshot()[2])
-          if record is None:
-              print('PREVIOUS_FAILURE_AUDIT_MISSING')
-          else:
-              details = record['details']
-              phase = details.get('phase', '')
-              allowed_phases = {'INDEX_PREPARATION', 'NATIVE_PREPARATION',
-                                'RISK_INPUT_PREPARATION', 'PRODUCTION_REPLAY',
-                                'NATIVE_PUBLICATION', 'PRODUCTION_COMPLETED'}
-              print('PREVIOUS_FAILURE_PHASE=' + (phase if phase in allowed_phases else 'UNKNOWN'))
-              error = details.get('error', '').split(':', 1)[0]
-              code = error if re.fullmatch(r'[A-Z][A-Z0-9_]{3,79}', error) else 'UNKNOWN'
-              print('PREVIOUS_FAILURE_CODE=' + code)
-              classes = re.findall(r'(?m)^([\w.]+(?:Error|Exception)):', details.get('log_tail', ''))
-              print('PREVIOUS_FAILURE_EXCEPTION=' + (classes[-1] if classes and re.fullmatch(r'[A-Za-z.]+(?:Error|Exception)', classes[-1]) else 'UNKNOWN'))
-          PY
       - name: 准备当前生产源码和锁定环境
         id: source
         env:
