@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import sys
 import tarfile
+import time as clock
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,18 +34,25 @@ def api(method: str, path: str, body: dict | None = None, *, limit: int = 2_000_
         'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
         'X-GitHub-Api-Version': '2022-11-28',
     })
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read(limit + 1)
-        if len(raw) > limit:
-            raise ValueError('PUBLIC_RESPONSE_TOO_LARGE')
-        return json.loads(raw)
-    except urllib.error.HTTPError as exc:
-        if method == 'GET' and exc.code == 404:
-            return None
-        raise RuntimeError(f'PUBLIC_HTTP_{exc.code}') from None
-    except (urllib.error.URLError, TimeoutError):
-        raise RuntimeError('PUBLIC_TRANSPORT_FAILED') from None
+    for attempt in range(3 if method == 'GET' else 1):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                raw = response.read(limit + 1)
+            if len(raw) > limit:
+                raise ValueError('PUBLIC_RESPONSE_TOO_LARGE')
+            return json.loads(raw)
+        except urllib.error.HTTPError as exc:
+            if method == 'GET' and exc.code == 404:
+                return None
+            if method == 'GET' and exc.code in (429, 500, 502, 503, 504) and attempt < 2:
+                clock.sleep(5 * (attempt + 1))
+                continue
+            raise RuntimeError(f'PUBLIC_HTTP_{exc.code}') from None
+        except (urllib.error.URLError, TimeoutError):
+            if method == 'GET' and attempt < 2:
+                clock.sleep(5 * (attempt + 1))
+                continue
+            raise RuntimeError('PUBLIC_TRANSPORT_FAILED') from None
 
 
 def read_file(path: str, ref: str) -> bytes | None:
@@ -131,14 +139,15 @@ def main() -> None:
         return
     saved = store.request('result', {'date': target})
     if not saved or saved.get('status') == 'RUNNING':
-        print('目标日期没有已完成的结果，未发布日报')
-        return
+        raise ValueError('RESULT_NOT_FINISHED')
     bundle = store.decode_bundle(saved['bundle'], saved['sha256'])
     report = verified_report(saved, target, bundle)
     proof = publish(target, markdown(report))
     # The verified public Git commit is the publication receipt, not a new store event.
     print(json.dumps(proof, ensure_ascii=False, sort_keys=True))
     print('中文日报已保存并完成内容回读核验：' + proof['path'])
+    if saved['status'] == 'FAILED':
+        raise ValueError('SAVED_RESULT_FAILED')
 
 
 if __name__ == '__main__':
