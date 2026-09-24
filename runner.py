@@ -91,25 +91,46 @@ def prepare_risk_inputs(ctx) -> dict:
     return evidence_dates
 
 
-def prepare_native_with_retry(build_context, load_risk, log, prepare, probe, pause=clock.sleep):
-    """Wait for delayed same-session bars before reserving the one daily replay."""
+def prepare_native_with_retry(build_context, load_risk, log, prepare, probe, pause=clock.sleep,
+                              *, before=None, after=None):
+    """Wait for delayed index, stock and risk bars before the one daily replay."""
     for attempt in range(3):
         ctx = build_context()  # A failed probe may have partially populated its context.
-        if not prepare(ctx, load_risk):
-            break
-        log.flush()
-        start = log.tell()
-        if probe(ctx):
-            return ctx
-        log.flush()
-        with Path(log.name).open('rb') as evidence:
-            evidence.seek(start)
-            coverage_pending = b'TRADING_DAY_COVERAGE' in evidence.read()
+        try:
+            if before is not None:
+                before(ctx)
+            if not prepare(ctx, load_risk):
+                break
+            log.flush()
+            start = log.tell()
+            if probe(ctx):
+                if after is not None:
+                    after(ctx)
+                return ctx
+            log.flush()
+            with Path(log.name).open('rb') as evidence:
+                evidence.seek(start)
+                coverage_pending = b'TRADING_DAY_COVERAGE' in evidence.read()
+        except (ValueError, RuntimeError) as exc:
+            coverage_pending = ('TRADING_DAY_COVERAGE' in str(exc) or
+                                'INDEX_EVIDENCE_UNAVAILABLE' in str(exc) or
+                                'RISK_INPUT_UNAVAILABLE' in str(exc) or
+                                'Unable to refresh index' in str(exc))
+            if not coverage_pending:
+                raise
+            if attempt == 2:
+                raise ValueError('NATIVE_PREPARATION_FAILED') from exc
         if not coverage_pending or attempt == 2:
             break
         print('  当日行情覆盖尚未齐全，等待 10 分钟重新取数。')
         pause(600)
     raise ValueError('NATIVE_PREPARATION_FAILED')
+
+
+def existing_result_outcome(existing: dict) -> str:
+    if existing['status'] not in ('SUCCESS', 'DEGRADED'):
+        raise ValueError('EXISTING_RESULT_UNUSABLE:' + existing['status'])
+    return 'EXISTING_RESULT_' + existing['status']
 
 
 def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dict:
@@ -174,7 +195,7 @@ def run() -> tuple[int, str]:
                 raise ValueError('PRODUCTION_CORE17_IDENTITY')
             context = store.request('context', {'date': target, 'compare_date': previous_date})
             if context.get('existing'):
-                return 0, 'EXISTING_RESULT_' + context['existing']['status']
+                return 0, existing_result_outcome(context['existing'])
             previous = context.get('previous')
             if previous:
                 store.restore(store.decode_bundle(previous['bundle'], previous['bundle_sha256']), root)
@@ -196,20 +217,24 @@ def run() -> tuple[int, str]:
                        'universe': [[code, name] for code, name in symbols.items()]}
             report['profile'] = profile
             # Refresh after restoring prior evidence, before reserving computation.
-            report['phase'] = 'INDEX_PREPARATION'
-            report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
-            report['phase'] = 'NATIVE_PREPARATION'
-            # Reuse all native preparation/validation, before consuming the one calculation.
+            def before(ctx):
+                report['phase'] = 'INDEX_PREPARATION'
+                report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
+                report['phase'] = 'NATIVE_PREPARATION'
+
+            def after(ctx):
+                report['phase'] = 'RISK_INPUT_PREPARATION'
+                report['risk_input_evidence_dates'] = prepare_risk_inputs(ctx)
+                if not freeze_scan(ctx):
+                    raise ValueError('NATIVE_SNAPSHOT_FAILED')
+
+            # Rebuild the complete evidence snapshot on each delayed-data retry.
             ctx = prepare_native_with_retry(build_context, load_prev_risk_state, log,
-                                            prepare_scan, probe_market)
-            report['phase'] = 'RISK_INPUT_PREPARATION'
-            report['risk_input_evidence_dates'] = prepare_risk_inputs(ctx)
-            if not freeze_scan(ctx):
-                raise ValueError('NATIVE_SNAPSHOT_FAILED')
+                                            prepare_scan, probe_market, before=before, after=after)
             receipt = store.request('start', {'date': target, 'strategy_sha': ident['strategy_sha'],
                                              'previous_date': previous['date'] if previous else None})
             if not receipt.get('started'):
-                return 0, 'DUPLICATE_RESERVATION'
+                raise ValueError('DUPLICATE_RESERVATION:' + receipt['status'])
             reserved = True
             report['phase'] = 'PRODUCTION_REPLAY'
             result, decision = run_simulation(ctx)

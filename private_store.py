@@ -11,6 +11,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import tarfile
+import time as clock
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
@@ -259,17 +260,24 @@ def finish(date: str, status: str, report: dict, markdown: str,
     expected = digest(bundle)
     payload = {'date': date, 'status': status, 'report': report, 'markdown': markdown,
                'risk_state': risk_state, 'bundle': base64.b64encode(bundle).decode(), 'sha256': expected}
-    try:
-        receipt = request('finish', payload)
-    except RuntimeError:
-        saved = request('result', {'date': date})
-        if saved.get('sha256') != expected or saved.get('report') != report:
-            raise
-        receipt = {'saved': True}
-    saved = request('result', {'date': date})
-    if not receipt.get('saved') or saved.get('run_id') != str(report['actions_run_id']):
-        raise ValueError('PERSISTENCE_NOT_VERIFIED')
-    remote = decode_bundle(saved['bundle'], saved['sha256'])
-    if remote != bundle or saved.get('report') != report or saved.get('status') != status:
-        raise ValueError('READBACK_MISMATCH')
-    return {'sha256': expected, 'bytes': len(bundle)}
+    for attempt in range(3):
+        try:
+            try:
+                receipt = request('finish', payload)
+            except RuntimeError:
+                # An uncertain write is checked before any attempt to write again.
+                saved = request('result', {'date': date})
+                if saved.get('sha256') != expected or saved.get('report') != report:
+                    raise
+                receipt = {'saved': True}
+            saved = request('result', {'date': date})
+            if not receipt.get('saved') or saved.get('run_id') != str(report['actions_run_id']):
+                raise ValueError('PERSISTENCE_NOT_VERIFIED')
+            remote = decode_bundle(saved['bundle'], saved['sha256'])
+            if remote != bundle or saved.get('report') != report or saved.get('status') != status:
+                raise ValueError('READBACK_MISMATCH')
+            return {'sha256': expected, 'bytes': len(bundle)}
+        except RuntimeError:
+            if attempt == 2:
+                raise
+            clock.sleep(5 * (attempt + 1))

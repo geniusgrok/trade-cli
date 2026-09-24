@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import private_store as store
 import report
-from runner import prepare_native_with_retry, resolve_target
+from runner import existing_result_outcome, prepare_native_with_retry, resolve_target
 
 
 class CalendarTests(unittest.TestCase):
@@ -33,6 +33,30 @@ class CalendarTests(unittest.TestCase):
 
 
 class NativePreparationRetryTests(unittest.TestCase):
+    def test_late_index_and_risk_bars_retry_without_reserving_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            contexts, waits, stages = [], [], []
+            def build():
+                ctx = object()
+                contexts.append(ctx)
+                return ctx
+            def before(ctx):
+                stages.append(('index', ctx))
+                if len(contexts) == 1:
+                    raise ValueError('INDEX_EVIDENCE_UNAVAILABLE: TRADING_DAY_COVERAGE')
+            def after(ctx):
+                stages.append(('risk', ctx))
+                if len(contexts) == 2:
+                    raise ValueError('TRADING_DAY_COVERAGE:risk')
+            with (Path(directory) / 'native.log').open('w', encoding='utf-8') as log:
+                result = prepare_native_with_retry(build, None, log,
+                    lambda ctx, load: True, lambda ctx: True, waits.append,
+                    before=before, after=after)
+            self.assertIs(result, contexts[2])
+            self.assertEqual(waits, [600, 600])
+            self.assertEqual(stages, [('index', contexts[0]), ('index', contexts[1]),
+                ('risk', contexts[1]), ('index', contexts[2]), ('risk', contexts[2])])
+
     def test_delayed_bar_rebuilds_context_before_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             contexts, waits = [], []
@@ -64,6 +88,18 @@ class NativePreparationRetryTests(unittest.TestCase):
                         log, lambda ctx, load: True, probe, waits.append)
             self.assertEqual(len(contexts), 1)
             self.assertEqual(waits, [])
+
+
+class ExistingResultTests(unittest.TestCase):
+    def test_completed_result_is_safe_to_republish_without_replay(self):
+        for status in ('SUCCESS', 'DEGRADED'):
+            self.assertEqual(existing_result_outcome({'status': status}),
+                             'EXISTING_RESULT_' + status)
+
+    def test_unfinished_or_failed_result_must_not_be_green(self):
+        for status in ('RUNNING', 'FAILED', 'UNKNOWN'):
+            with self.assertRaisesRegex(ValueError, 'EXISTING_RESULT_UNUSABLE'):
+                existing_result_outcome({'status': status})
 
 
 class EvidenceTests(unittest.TestCase):
@@ -109,6 +145,22 @@ class EvidenceTests(unittest.TestCase):
             with patch('private_store.request',side_effect=[RuntimeError('unknown'),saved,saved]) as req:
                 store.finish('2026-09-22','SUCCESS',r,'report',{},root)
                 self.assertEqual([c.args[0] for c in req.call_args_list],['finish','result','result'])
+
+    def test_transient_state_outage_retries_same_finished_bundle(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'output').mkdir();(root/'output/a').write_bytes(b'x')
+            blob=store.pack(root);r={'actions_run_id':'123'}
+            saved={'run_id':'123','status':'SUCCESS','report':r,
+                   'bundle':base64.b64encode(blob).decode(),'sha256':store.digest(blob)}
+            responses=[RuntimeError('write uncertain'), RuntimeError('read unavailable'),
+                       {'saved':True}, saved]
+            with patch('private_store.request',side_effect=responses) as req, \
+                 patch('private_store.clock.sleep') as pause:
+                proof=store.finish('2026-09-22','SUCCESS',r,'report',{},root)
+            self.assertEqual([c.args[0] for c in req.call_args_list],
+                             ['finish','result','finish','result'])
+            pause.assert_called_once_with(5)
+            self.assertEqual(proof['sha256'],store.digest(blob))
 
 
 class ReportTests(unittest.TestCase):

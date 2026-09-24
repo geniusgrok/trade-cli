@@ -114,6 +114,21 @@ class PublicationTests(unittest.TestCase):
         self.data = self.text.encode()
         self.head = 'b' * 40
 
+    def test_transient_read_retries_without_retrying_writes(self):
+        import urllib.error
+        from unittest.mock import Mock
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.read.return_value = b'{"ok":true}'
+        with patch.dict('os.environ', {'REPORT_PUBLISH_TOKEN': 'test'}), \
+             patch('publish_report.urllib.request.urlopen',
+                   side_effect=[urllib.error.URLError('timeout'), response]) as request, \
+             patch('publish_report.clock.sleep') as pause:
+            self.assertEqual(publisher.api('GET', '/git/ref/heads/main'), {'ok': True})
+        self.assertEqual(request.call_count, 2)
+        pause.assert_called_once_with(5)
+
     def test_create_then_immutable_and_main_readback(self):
         responses = [None, {'content': {'sha': publisher.blob_id(self.data)}, 'commit': {'sha': self.head}},
                      envelope(self.data), {'object': {'sha': self.head}}, envelope(self.data)]

@@ -11,6 +11,49 @@ from test_publication import fixture
 
 
 class PublicationEntryTests(unittest.TestCase):
+    def test_ready_day_without_finished_result_fails_instead_of_reporting_success(self):
+        store = types.ModuleType('private_store')
+        store.request = Mock(return_value={'status': 'RUNNING'})
+        sessions = types.ModuleType('quantfusion.data.sessions')
+        sessions.load_calendar = Mock(return_value=object())
+        runner = types.ModuleType('runner')
+        runner.resolve_target = Mock(return_value=('2026-09-22', '2026-09-21', 'READY'))
+        modules = {'private_store': store, 'runner': runner,
+                   'quantfusion': types.ModuleType('quantfusion'),
+                   'quantfusion.data': types.ModuleType('quantfusion.data'),
+                   'quantfusion.data.sessions': sessions}
+        with patch.dict(sys.modules, modules), patch.dict('os.environ', {
+                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'schedule'}), \
+             patch.object(sys, 'path', sys.path.copy()), \
+             patch.object(publisher, 'publish') as publish:
+            with self.assertRaisesRegex(ValueError, 'RESULT_NOT_FINISHED'):
+                publisher.main()
+        publish.assert_not_called()
+
+    def test_failed_report_is_published_but_workflow_remains_failed(self):
+        value = {**fixture(), 'status': 'FAILED'}
+        saved = {'status': 'FAILED', 'bundle': 'unused', 'sha256': 'digest'}
+        store = types.ModuleType('private_store')
+        store.request = Mock(return_value=saved)
+        store.decode_bundle = Mock(return_value=b'evidence')
+        sessions = types.ModuleType('quantfusion.data.sessions')
+        sessions.load_calendar = Mock(return_value=object())
+        runner = types.ModuleType('runner')
+        runner.resolve_target = Mock(return_value=('2026-09-22', '2026-09-21', 'READY'))
+        modules = {'private_store': store, 'runner': runner,
+                   'quantfusion': types.ModuleType('quantfusion'),
+                   'quantfusion.data': types.ModuleType('quantfusion.data'),
+                   'quantfusion.data.sessions': sessions}
+        with patch.dict(sys.modules, modules), patch.dict('os.environ', {
+                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'schedule'}), \
+             patch.object(sys, 'path', sys.path.copy()), \
+             patch.object(publisher, 'verified_report', return_value=value), \
+             patch.object(publisher, 'publish', return_value={'path':'reports/2026-09-22.md'}) as publish, \
+             patch('builtins.print'):
+            with self.assertRaisesRegex(ValueError, 'SAVED_RESULT_FAILED'):
+                publisher.main()
+        publish.assert_called_once_with('2026-09-22', report.markdown(value))
+
     def test_completed_publication_does_not_add_unsupported_store_event(self):
         value = fixture()
         saved = {'status': 'DEGRADED', 'bundle': 'unused', 'sha256': 'digest'}
