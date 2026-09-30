@@ -30,7 +30,7 @@ jobs:
       PYTHONUNBUFFERED: '1'
       TARGET_DATE: ${{ inputs.target_date || '' }}
       REPORT_PUBLISH_TOKEN: ${{ github.token }}
-      STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY || secrets.TRADE_READ_TOKEN }}
+      STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}
     steps:
       - name: 获取运行编排代码
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

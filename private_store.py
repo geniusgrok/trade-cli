@@ -29,7 +29,7 @@ def digest(data: bytes) -> str:
 
 
 def _key() -> bytes:
-    # The existing Actions read secret remains outside the public repository.
+    # The independent state encryption secret stays outside the public repository.
     secret = os.environ['STATE_SEAL_KEY']
     if len(secret) < 32:
         raise ValueError('STATE_KEY_MISSING_OR_SHORT')

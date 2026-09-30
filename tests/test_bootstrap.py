@@ -44,7 +44,8 @@ class SourceCheckoutTests(unittest.TestCase):
         from pathlib import Path
 
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text(encoding='utf-8')
-        self.assertIn('STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY || secrets.TRADE_READ_TOKEN }}', workflow)
+        self.assertIn('STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}', workflow)
+        self.assertNotIn('secrets.TRADE_STATE_KEY ||', workflow)
         self.assertIn('TRADE_READ_TOKEN: ${{ secrets.TRADE_SOURCE_TOKEN || secrets.TRADE_READ_TOKEN }}', workflow)
 
     def test_checkout_uses_transferred_repository_and_preserves_main_and_key(self):
