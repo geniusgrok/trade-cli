@@ -64,8 +64,18 @@ def main() -> int:
                         reason = 'SOURCE_REPOSITORY_NOT_ACCESSIBLE'
                     elif 'authentication failed' in lower_tail or 'invalid username or token' in lower_tail:
                         reason = 'SOURCE_AUTHENTICATION_FAILED'
+                    elif 'write access to repository not granted' in lower_tail or 'returned error: 403' in lower_tail:
+                        reason = 'SOURCE_ACCESS_FORBIDDEN'
+                    elif 'returned error: 401' in lower_tail or 'could not read username' in lower_tail:
+                        reason = 'SOURCE_AUTHENTICATION_FAILED'
+                    elif 'returned error: 404' in lower_tail:
+                        reason = 'SOURCE_REPOSITORY_NOT_ACCESSIBLE'
                     elif 'could not resolve host' in lower_tail:
                         reason = 'SOURCE_DNS_FAILED'
+                    elif 'remote branch main not found' in lower_tail:
+                        reason = 'SOURCE_BRANCH_MISSING'
+                    elif 'destination path' in lower_tail and 'already exists' in lower_tail:
+                        reason = 'SOURCE_DIRECTORY_NOT_EMPTY'
                 store.request('event', {'date': datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat(),
                     'status': 'PREPARATION_FAILED', 'details': {'phase': 'SOURCE_OR_ENVIRONMENT', 'operation': phase,
                     'reason': reason, 'log_tail': tail}})

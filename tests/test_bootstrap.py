@@ -93,6 +93,13 @@ class SourceCheckoutTests(unittest.TestCase):
             ('Repository not found', 'SOURCE_REPOSITORY_NOT_ACCESSIBLE'),
             ('Authentication failed', 'SOURCE_AUTHENTICATION_FAILED'),
             ('Could not resolve host', 'SOURCE_DNS_FAILED'),
+            ('Write access to repository not granted', 'SOURCE_ACCESS_FORBIDDEN'),
+            ('The requested URL returned error: 403', 'SOURCE_ACCESS_FORBIDDEN'),
+            ('The requested URL returned error: 401', 'SOURCE_AUTHENTICATION_FAILED'),
+            ('could not read Username: terminal prompts disabled', 'SOURCE_AUTHENTICATION_FAILED'),
+            ('The requested URL returned error: 404', 'SOURCE_REPOSITORY_NOT_ACCESSIBLE'),
+            ('Remote branch main not found', 'SOURCE_BRANCH_MISSING'),
+            ('destination path already exists', 'SOURCE_DIRECTORY_NOT_EMPTY'),
         ]
         for message, reason in cases:
             with self.subTest(reason=reason), tempfile.TemporaryDirectory() as root:
