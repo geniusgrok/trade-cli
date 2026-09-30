@@ -39,7 +39,7 @@ def main() -> int:
     env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + token).encode()).decode()
     with (logs / 'setup.log').open('wb') as log:
         try:
-            subprocess.run(['git', 'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch=main', 'https://github.com/ychenracing/trade.git', str(source)], env=env, stdout=log, stderr=log, check=True, timeout=180)
+            subprocess.run(['git', 'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch=main', 'https://github.com/geniusgrok/trade.git', str(source)], env=env, stdout=log, stderr=log, check=True, timeout=180)
             subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '/quantfusion/', '/data/trading_calendar.json', '/requirements*.txt', '/pyproject.toml', '/AGENTS.md', '/README.md'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
             subprocess.run(['git', 'checkout', 'main'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
             lock = source / 'requirements-lock.txt'

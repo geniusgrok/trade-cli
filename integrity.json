@@ -15,9 +15,9 @@
     "sha256": "d50aa29b5dd015aad3a814ba8994dc98b42adee93a9bef53006a3ef5ca4340f9"
   },
   "bootstrap.py": {
-    "bytes": 3575,
-    "git_blob": "ac6d241b983436aa787dbd7f3464781178e5aa58",
-    "sha256": "f40a53addb36e41f353ac7e06f4f2632010e65f59c13aa6ce05d4cb3a57b6523"
+    "bytes": 3574,
+    "git_blob": "407885bcecba188cdf198d33e313ab8f55138716",
+    "sha256": "3d14aa88bbdd0374566faf6af361aa4c52274e3eeb3cd3543bd111f2a772701a"
   },
   "preflight.py": {
     "bytes": 634,
@@ -50,9 +50,9 @@
     "sha256": "e69a0453c4091e5cfc33f4425fadc905b151046231d4ccef9caa9a8ce3a53f06"
   },
   "tests/test_bootstrap.py": {
-    "bytes": 2017,
-    "git_blob": "07a508de65dffeffcb2a6d5a05e688b428bc39e3",
-    "sha256": "1bad5cccab01bcefafb4f4293d48b7dd0d4f9a825b8bc0ce87633d2fa3052c02"
+    "bytes": 4733,
+    "git_blob": "b3b9b9f9e89f5afad87c3b59923e54dc0c596299",
+    "sha256": "ce878be7b1b835123d868a407e003e9b9ede6aeaa3b4c733fbc0688d05e473c7"
   },
   "tests/test_index_preparation.py": {
     "bytes": 2608,
