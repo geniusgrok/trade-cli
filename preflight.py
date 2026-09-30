@@ -12,9 +12,25 @@ def main() -> None:
     print('STATE_BRANCH_AND_ENCRYPTION_VERIFIED')
 
 
-if __name__ == '__main__':
+def check() -> int:
     try:
         main()
-    except Exception:
-        print('BLOCKED: STATE_BRANCH_OR_KEY_UNAVAILABLE')
-        raise SystemExit(1) from None
+    except Exception as exc:
+        # Only fixed categories may enter public Actions logs.
+        reason = str(exc)
+        if reason not in {
+            'STATE_KEY_MISSING_OR_SHORT', 'STATE_BRANCH_MISSING',
+            'STATE_BRANCH_UNAVAILABLE', 'STATE_DECRYPT_FAILED',
+            'STATE_ENVELOPE_INVALID', 'STATE_DOCUMENT_INVALID',
+            'STATE_BLOB_INTEGRITY', 'STATE_BLOB_ENCODING',
+            'STATE_TREE_TRUNCATED', 'PUBLIC_TRANSPORT_FAILED',
+            'PUBLIC_HTTP_401', 'PUBLIC_HTTP_403', 'PUBLIC_HTTP_429',
+        }:
+            reason = 'STATE_BRANCH_OR_KEY_UNAVAILABLE'
+        print('BLOCKED: ' + reason)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(check())
