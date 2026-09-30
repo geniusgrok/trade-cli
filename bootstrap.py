@@ -37,26 +37,43 @@ def main() -> int:
     env['GIT_CONFIG_COUNT'] = '1'
     env['GIT_CONFIG_KEY_0'] = 'http.https://github.com/.extraheader'
     env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + token).encode()).decode()
+    phase = 'SOURCE_CLONE'
     with (logs / 'setup.log').open('wb') as log:
         try:
             subprocess.run(['git', 'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch=main', 'https://github.com/geniusgrok/trade.git', str(source)], env=env, stdout=log, stderr=log, check=True, timeout=180)
+            phase = 'SOURCE_SPARSE_CHECKOUT'
             subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '/quantfusion/', '/data/trading_calendar.json', '/requirements*.txt', '/pyproject.toml', '/AGENTS.md', '/README.md'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+            phase = 'SOURCE_CHECKOUT'
             subprocess.run(['git', 'checkout', 'main'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+            phase = 'LOCK_VALIDATION'
             lock = source / 'requirements-lock.txt'
             if not lock.is_file():
                 raise ValueError('PRODUCTION_LOCK_MISSING')
+            phase = 'DEPENDENCY_INSTALLATION'
             install_env = os.environ.copy(); install_env.pop('TRADE_READ_TOKEN', None)
             subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '-r', str(lock)], cwd=source, env=install_env, stdout=log, stderr=log, check=True, timeout=360)
-        except (subprocess.SubprocessError, OSError, ValueError):
+        except (subprocess.SubprocessError, OSError, ValueError) as error:
             log.flush()
+            reason = 'TIMEOUT' if isinstance(error, subprocess.TimeoutExpired) else 'OPERATION_FAILED'
             try:
                 tail = (logs / 'setup.log').read_text(errors='replace')[-16000:]
                 tail = tail.replace(token, '[REDACTED]').replace(env['GIT_CONFIG_VALUE_0'], '[REDACTED]')
+                if phase == 'SOURCE_CLONE':
+                    lower_tail = tail.lower()
+                    if 'repository not found' in lower_tail:
+                        reason = 'SOURCE_REPOSITORY_NOT_ACCESSIBLE'
+                    elif 'authentication failed' in lower_tail or 'invalid username or token' in lower_tail:
+                        reason = 'SOURCE_AUTHENTICATION_FAILED'
+                    elif 'could not resolve host' in lower_tail:
+                        reason = 'SOURCE_DNS_FAILED'
                 store.request('event', {'date': datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat(),
-                    'status': 'PREPARATION_FAILED', 'details': {'phase': 'SOURCE_OR_ENVIRONMENT', 'log_tail': tail}})
+                    'status': 'PREPARATION_FAILED', 'details': {'phase': 'SOURCE_OR_ENVIRONMENT', 'operation': phase,
+                    'reason': reason, 'log_tail': tail}})
             except Exception:
                 pass
             print('BLOCKED: SOURCE_OR_ENVIRONMENT_PREPARATION_FAILED')
+            print('PREPARATION_PHASE: ' + phase)
+            print('PREPARATION_REASON: ' + reason)
             return 1
     print('SOURCE_AND_LOCKED_ENVIRONMENT_READY')
     return 0

@@ -86,5 +86,58 @@ class SourceCheckoutTests(unittest.TestCase):
             self.assertNotIn('test-read-secret', out.getvalue())
 
 
+    def test_source_failures_expose_only_safe_diagnostic_categories(self):
+        import subprocess
+
+        cases = [
+            ('Repository not found', 'SOURCE_REPOSITORY_NOT_ACCESSIBLE'),
+            ('Authentication failed', 'SOURCE_AUTHENTICATION_FAILED'),
+            ('Could not resolve host', 'SOURCE_DNS_FAILED'),
+        ]
+        for message, reason in cases:
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as root:
+                out = io.StringIO()
+                env = {'RUNNER_TEMP': root, 'TRADE_READ_TOKEN': 'test-read-secret'}
+
+                def fail_clone(command, **kwargs):
+                    kwargs['stdout'].write((message + ' private-log test-read-secret').encode())
+                    raise subprocess.CalledProcessError(128, command)
+
+                with patch.dict(os.environ, env, clear=True), \
+                        patch('bootstrap.sys.version_info', (3, 12, 0)), \
+                        patch('bootstrap.subprocess.run', side_effect=fail_clone) as run, \
+                        patch('bootstrap.store.request') as save, \
+                        contextlib.redirect_stdout(out):
+                    self.assertEqual(bootstrap.main(), 1)
+                self.assertEqual(run.call_count, 1)
+                self.assertIn('PREPARATION_PHASE: SOURCE_CLONE', out.getvalue())
+                self.assertIn('PREPARATION_REASON: ' + reason, out.getvalue())
+                self.assertNotIn('private-log', out.getvalue())
+                self.assertNotIn('test-read-secret', out.getvalue())
+                details = save.call_args.args[1]['details']
+                self.assertEqual(details['reason'], reason)
+                self.assertNotIn('test-read-secret', details['log_tail'])
+
+    def test_dependency_failure_is_distinguished_from_source_access(self):
+        from pathlib import Path
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root) / 'trade-source'
+            source.mkdir()
+            (source / 'requirements-lock.txt').write_text('', encoding='utf-8')
+            env = {'RUNNER_TEMP': root, 'TRADE_READ_TOKEN': 'test-read-secret'}
+            out = io.StringIO()
+            with patch.dict(os.environ, env, clear=True), \
+                    patch('bootstrap.sys.version_info', (3, 12, 0)), \
+                    patch('bootstrap.subprocess.run', side_effect=[None, None, None,
+                          subprocess.CalledProcessError(1, 'pip')]), \
+                    patch('bootstrap.store.request'), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(bootstrap.main(), 1)
+            self.assertIn('PREPARATION_PHASE: DEPENDENCY_INSTALLATION', out.getvalue())
+            self.assertIn('PREPARATION_REASON: OPERATION_FAILED', out.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()
