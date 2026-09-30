@@ -52,8 +52,8 @@ jobs:
       - name: 准备当前生产源码和锁定环境
         id: source
         env:
-          TRADE_READ_TOKEN: ${{ secrets.TRADE_READ_TOKEN }}
-          SOURCE_TOKEN_VARIABLE_PRESENT: ${{ vars.TRADE_READ_TOKEN != '' }}
+          TRADE_READ_TOKEN: ${{ secrets.TRADE_SOURCE_TOKEN || secrets.TRADE_READ_TOKEN }}
+          SOURCE_TOKEN_VARIABLE_PRESENT: ${{ vars.TRADE_SOURCE_TOKEN != '' || vars.TRADE_READ_TOKEN != '' }}
         run: python bootstrap.py
       - name: 执行生产策略并核验原件保存
         run: python runner.py

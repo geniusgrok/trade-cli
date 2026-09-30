@@ -40,6 +40,13 @@ class CredentialReadinessTests(unittest.TestCase):
 
 
 class SourceCheckoutTests(unittest.TestCase):
+    def test_workflow_keeps_state_key_when_source_credential_changes(self):
+        from pathlib import Path
+
+        workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text(encoding='utf-8')
+        self.assertIn('STATE_SEAL_KEY: ${{ secrets.TRADE_READ_TOKEN }}', workflow)
+        self.assertIn('TRADE_READ_TOKEN: ${{ secrets.TRADE_SOURCE_TOKEN || secrets.TRADE_READ_TOKEN }}', workflow)
+
     def test_checkout_uses_transferred_repository_and_preserves_main_and_key(self):
         from pathlib import Path
 
