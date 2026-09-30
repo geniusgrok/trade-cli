@@ -44,7 +44,8 @@ class SourceCheckoutTests(unittest.TestCase):
         from pathlib import Path
 
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text(encoding='utf-8')
-        self.assertIn('STATE_SEAL_KEY: ${{ secrets.TRADE_READ_TOKEN }}', workflow)
+        self.assertIn('STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}', workflow)
+        self.assertNotIn('secrets.TRADE_STATE_KEY ||', workflow)
         self.assertIn('TRADE_READ_TOKEN: ${{ secrets.TRADE_SOURCE_TOKEN || secrets.TRADE_READ_TOKEN }}', workflow)
 
     def test_checkout_uses_transferred_repository_and_preserves_main_and_key(self):
@@ -151,6 +152,22 @@ class SourceCheckoutTests(unittest.TestCase):
                 self.assertEqual(bootstrap.main(), 1)
             self.assertIn('PREPARATION_PHASE: DEPENDENCY_INSTALLATION', out.getvalue())
             self.assertIn('PREPARATION_REASON: OPERATION_FAILED', out.getvalue())
+
+
+class StatePreflightTests(unittest.TestCase):
+    def test_safe_failures_stop_without_exposing_details(self):
+        import preflight
+
+        for error, expected in [
+            (ValueError('STATE_DECRYPT_FAILED'), 'STATE_DECRYPT_FAILED'),
+            (RuntimeError('PUBLIC_TRANSPORT_FAILED'), 'PUBLIC_TRANSPORT_FAILED'),
+            (ValueError('private-secret-or-state'), 'STATE_BRANCH_OR_KEY_UNAVAILABLE'),
+        ]:
+            with self.subTest(expected=expected):
+                out = io.StringIO()
+                with patch('preflight.main', side_effect=error), contextlib.redirect_stdout(out):
+                    self.assertEqual(preflight.check(), 1)
+                self.assertEqual(out.getvalue(), 'BLOCKED: ' + expected + '\n')
 
 
 if __name__ == '__main__':
