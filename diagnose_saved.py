@@ -11,7 +11,7 @@ with tarfile.open(fileobj=io.BytesIO(bundle), mode='r:gz') as archive:
     native = json.load(archive.extractfile(files[name]))
     deployment = native['deployment']
     def route(value):
-        return {key: value.get(key) for key in ('name','boundary','regime','leaders')}
+        return {'name':value.get('name'),'boundary':value.get('boundary'),\n                'regime':{k:(value.get('regime') or {}).get(k) for k in ('regime','as_of','boundary')},\n                'leaders':(value.get('leaders') or {}).get('selected_symbols',[])}
     # Only public market diagnostics; no account, quantity, balance, setup log or key.
     print(json.dumps({
         'target_date': day, 'status': report['status'], 'strategy_sha': report['strategy_sha'],
