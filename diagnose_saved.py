@@ -22,6 +22,8 @@ with tarfile.open(fileobj=io.BytesIO(bundle), mode='r:gz') as archive:
         'summary': native['summary'],
         'replay_decision': route(deployment['decision']),
         'current_decision': route(deployment['current_decision']),
+        'route_field_equal': {key: deployment['decision'].get(key) == deployment['current_decision'].get(key)
+                              for key in ('name', 'boundary', 'regime', 'leaders')},
     }, ensure_ascii=False))
     references = ('300308','300502','300394','688008','603986','002409','688072','688256','300054','688082','688300','688205','920045','300776','688535','688249','688347','300666','600206','688409','688361','300604','688120')
     start = report['profile']['start_date']
