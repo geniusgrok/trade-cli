@@ -12,21 +12,27 @@ import subprocess
 import sys
 import time as clock
 import traceback
+import shutil
 from zoneinfo import ZoneInfo
 
 import private_store as store
 import report as reporting
+import runtime_profile as series
 
 
 def identity(source: Path) -> dict:
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
     if not re.fullmatch('[0-9a-f]{40}', sha):
         raise ValueError('INVALID_SOURCE_SHA')
+    series.require_source(sha)
     run = os.environ['GITHUB_RUN_ID']
-    return {'strategy_sha': sha, 'workflow_sha': os.environ['GITHUB_SHA'],
+    result = {'strategy_sha': sha, 'workflow_sha': os.environ['GITHUB_SHA'],
             'actions_run_id': run, 'actions_run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
             'actions_run_url': f'https://github.com/geniusgrok/trade-cli/actions/runs/{run}',
             'trigger': os.environ['GITHUB_EVENT_NAME'], 'started_at': datetime.now(ZoneInfo('Asia/Shanghai')).isoformat()}
+    if series.independent():
+        result['simulation_identity'] = series.INHERITED
+    return result
 
 
 def resolve_target(calendar, now: datetime, requested: str, event: str) -> tuple[str, str, str]:
@@ -79,8 +85,10 @@ def prepare_risk_inputs(ctx) -> dict:
         if frame is None:
             frame = DataFetcher.load_stock_data(
                 code, start, ctx.request.end_date,
-                data_dir=None, cache_dir=ctx.request.cache_dir
+                data_dir=getattr(ctx.request, 'local_market_dir', None), cache_dir=ctx.request.cache_dir
             )
+            if getattr(ctx.request, 'local_market_dir', None) and frame is not None:
+                frame = frame.loc[start:ctx.request.end_date].copy()
             additions[code] = frame
         if frame is None or frame.empty or frame.attrs.get('_stale', False):
             raise ValueError('RISK_INPUT_UNAVAILABLE:' + code)
@@ -158,7 +166,7 @@ def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dic
 
 
 def run() -> tuple[int, str]:
-    source = Path(os.environ['RUNNER_TEMP']) / 'trade-source'
+    source = series.source_path()
     root = Path(os.environ['RUNNER_TEMP']) / 'trade-runtime'
     (root / 'logs').mkdir(parents=True, exist_ok=True)
     output = root / 'output'; output.mkdir(exist_ok=True)
@@ -197,17 +205,36 @@ def run() -> tuple[int, str]:
             if context.get('existing'):
                 return 0, existing_result_outcome(context['existing'])
             previous = context.get('previous')
+            if series.independent() and not previous:
+                raise ValueError('INHERITED_SEED_REQUIRED')
             if previous:
-                store.restore(store.decode_bundle(previous['bundle'], previous['bundle_sha256']), root)
+                bundle = store.decode_bundle(previous['bundle'], previous['bundle_sha256'])
+                if series.independent():
+                    store.restore(bundle, root, complete=True)
+                else:
+                    store.restore(bundle, root)
                 state = json.loads((output / 'risk_state.json').read_text())
                 if state != previous['risk_state']:
                     raise ValueError('RESTORED_STATE_MISMATCH')
+                if series.independent():
+                    if state['scan_date'] != previous['date']:
+                        raise ValueError('RESTORED_CLOSE_DATE_MISMATCH')
+                    from quantfusion.data.snapshot import verify_frozen_snapshot
+                    verify_frozen_snapshot(output / 'snapshots' / state['scan_date'])
             previous_profile = previous.get('profile', {}) if previous else {}
             start = previous_profile.get('start_date', daily.START_DATE)
             capital = previous_profile.get('capital', daily.INITIAL_CAPITAL)
-            args = build_argument_parser().parse_args(['--start-date', start, '--end-date', target,
+            arguments = ['--start-date', start, '--end-date', target,
                 '--capital', str(capital), '--cache-dir', str(root / 'cache'),
-                '--regime-data-dir', str(root / 'regime'), '--output-dir', str(output)])
+                '--regime-data-dir', str(root / 'regime'), '--output-dir', str(output)]
+            local_market = os.environ.get('TRADE_LOCAL_MARKET_DIR', '') if series.independent() else ''
+            if series.independent():
+                arguments.append('--resume')
+                report['continuation'] = {'mode': 'native_full_checkpoint_resume', 'previous_close': previous['date']}
+            if local_market:
+                shutil.copytree(Path(os.environ['TRADE_LOCAL_REGIME_DIR']), root / 'regime', dirs_exist_ok=True)
+                arguments.extend(['--local-market-dir', local_market])
+            args = build_argument_parser().parse_args(arguments)
             dates = resolve_scan_dates(target)
             def build_context():
                 return ScanContext(ScanRequest.from_args(args, start, target, args.capital), symbols, dates)
@@ -219,7 +246,11 @@ def run() -> tuple[int, str]:
             # Refresh after restoring prior evidence, before reserving computation.
             def before(ctx):
                 report['phase'] = 'INDEX_PREPARATION'
-                report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
+                if local_market:
+                    from quantfusion.data.sessions import index_coverage
+                    report['index_preparation'] = {'mode': 'local_read_only', 'coverage': index_coverage(ctx.request.regime_data_dir, dates)}
+                else:
+                    report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
                 report['phase'] = 'NATIVE_PREPARATION'
 
             def after(ctx):
@@ -231,6 +262,9 @@ def run() -> tuple[int, str]:
             # Rebuild the complete evidence snapshot on each delayed-data retry.
             ctx = prepare_native_with_retry(build_context, load_prev_risk_state, log,
                                             prepare_scan, probe_market, before=before, after=after)
+            if series.independent():
+                from quantfusion.io.state_store import validate_checkpoint_identity
+                validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
             receipt = store.request('start', {'date': target, 'strategy_sha': ident['strategy_sha'],
                                              'previous_date': previous['date'] if previous else None})
             if not receipt.get('started'):

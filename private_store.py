@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
 from publish_report import api, blob_id
+import runtime_profile as profile
 
 BRANCH = 'runtime-state'
 MAX_BUNDLE = 8 * 1024 * 1024
@@ -39,14 +40,18 @@ def _key() -> bytes:
 def _seal(value: dict, path: str) -> bytes:
     nonce = os.urandom(12)
     raw = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode()
-    return b'TD1' + nonce + AESGCM(_key()).encrypt(nonce, raw, path.encode())
+    return b'TD1' + nonce + AESGCM(_key()).encrypt(nonce, raw, _aad(path))
+
+
+def _aad(path: str) -> bytes:
+    return (profile.INHERITED + '\0' + path).encode() if profile.independent() else path.encode()
 
 
 def _open(data: bytes, path: str) -> dict:
     if not data.startswith(b'TD1') or len(data) < 32:
         raise ValueError('STATE_ENVELOPE_INVALID')
     try:
-        value = json.loads(AESGCM(_key()).decrypt(data[3:15], data[15:], path.encode()))
+        value = json.loads(AESGCM(_key()).decrypt(data[3:15], data[15:], _aad(path)))
     except (ValueError, KeyError, InvalidTag) as exc:
         raise ValueError('STATE_DECRYPT_FAILED') from exc
     if not isinstance(value, dict):
@@ -55,7 +60,7 @@ def _open(data: bytes, path: str) -> dict:
 
 
 def _snapshot() -> tuple[str, str, dict[str, str]]:
-    ref = api('GET', f'/git/ref/heads/{BRANCH}')
+    ref = api('GET', f'/git/ref/heads/{profile.state_branch()}')
     if ref is None:
         raise ValueError('STATE_BRANCH_MISSING')
     head = ref['object']['sha']
@@ -92,7 +97,7 @@ def _commit(path: str, value: dict, head: str, tree: str, files: dict[str, str])
         {'path': path, 'mode': '100644', 'type': 'blob', 'sha': created['sha']}]})
     commit = api('POST', '/git/commits', {'message': '保存加密运行状态', 'tree': updated['sha'], 'parents': [head]})
     try:
-        api('PATCH', f'/git/refs/heads/{BRANCH}', {'sha': commit['sha'], 'force': False})
+        api('PATCH', f'/git/refs/heads/{profile.state_branch()}', {'sha': commit['sha'], 'force': False})
     except RuntimeError:
         # A rejected or ambiguous ref update must be resolved by the caller's readback.
         raise RuntimeError('STATE_REF_UPDATE_UNCERTAIN') from None
@@ -112,6 +117,7 @@ def request(route: str, payload: dict) -> dict:
     path = _path(day)
     head, tree, files = _snapshot()
     current = _read(path, files)
+    profile.require_record(current)
     if route == 'result':
         return current or {}
     if route == 'context':
@@ -119,12 +125,16 @@ def request(route: str, payload: dict) -> dict:
         previous = None
         for candidate in reversed(earlier):
             record = _read(candidate, files)
+            profile.require_record(record)
             if record['status'] in ('SUCCESS', 'DEGRADED') and record.get('risk_state') is not None:
+                if profile.independent() and record['risk_state'].get('schema_version') != 2:
+                    raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
                 previous = {'date': candidate[5:15], 'strategy_sha': record['report']['strategy_sha'],
                             'risk_state': record['risk_state'], 'bundle': record['bundle'],
                             'bundle_sha256': record['sha256'], 'profile': record['report'].get('profile', {})}
                 break
         compare = _read(_path(payload['compare_date']), files) if payload.get('compare_date') else None
+        profile.require_record(compare)
         return {'existing': current and {k: current[k] for k in ('status', 'run_id', 'strategy_sha')},
                 'previous': previous, 'comparison': compare['report'] if compare and compare['status'] in ('SUCCESS', 'DEGRADED') else None}
     if route == 'start':
@@ -135,13 +145,17 @@ def request(route: str, payload: dict) -> dict:
             raise ValueError('OUT_OF_ORDER_DATE')
         if runs:
             last = _read(max(runs), files)
-            if last['status'] in ('RUNNING', 'FAILED'):
+            if (last['status'] not in ('SUCCESS', 'DEGRADED') if profile.independent()
+                    else last['status'] in ('RUNNING', 'FAILED')):
                 raise ValueError('PREVIOUS_RUN_UNRESOLVED')
         prior = request('context', {'date': day, 'compare_date': None})['previous']
         if (prior or {}).get('date') != payload.get('previous_date'):
             raise ValueError('STATE_CHANGED')
         record = {'status': 'RUNNING', 'run_id': os.environ['GITHUB_RUN_ID'],
                   'strategy_sha': payload['strategy_sha'], 'previous_date': payload.get('previous_date')}
+        if profile.independent():
+            record['simulation_identity'] = profile.INHERITED
+        profile.require_record(record)
         try:
             _commit(path, record, head, tree, files)
         except (RuntimeError, ValueError):
@@ -161,6 +175,11 @@ def request(route: str, payload: dict) -> dict:
             raise ValueError('STATE_IDENTITY')
         if status == 'FAILED' and payload['risk_state'] is not None:
             raise ValueError('FAILED_STATE_NOT_PUBLISHABLE')
+        if profile.independent():
+            if report.get('simulation_identity') != profile.INHERITED:
+                raise ValueError('INDEPENDENT_REPORT_IDENTITY')
+            if status in ('SUCCESS', 'DEGRADED') and (payload['risk_state'] or {}).get('schema_version') != 2:
+                raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
         decode_bundle(payload['bundle'], payload['sha256'])
         record = {**current, 'status': status, 'report': report, 'markdown': payload['markdown'],
                   'risk_state': payload['risk_state'], 'bundle': payload['bundle'],
@@ -227,10 +246,40 @@ def decode_bundle(encoded: str, expected: str) -> bytes:
     return data
 
 
-def restore(data: bytes, root: Path) -> None:
+def restore(data: bytes, root: Path, *, complete: bool = False) -> None:
     """Restore caches and native state only; old reports never become today's."""
     total = 0
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
+        close = None
+        if complete:
+            names = set()
+            expanded = 0
+            for member in archive.getmembers():
+                member_path = PurePosixPath(member.name)
+                expanded += member.size
+                if (not member.isfile() or member_path.is_absolute() or '..' in member_path.parts or
+                        member.name in names or expanded > MAX_EXPANDED):
+                    raise ValueError('UNSAFE_BUNDLE')
+                names.add(member.name)
+            try:
+                state_bytes = archive.extractfile('output/risk_state.json').read()
+                state = json.loads(state_bytes)
+                close = state['scan_date']
+                _path(close)
+                if state['schema_version'] != 2 or state['checkpoint']['state']['last_completed_close'] != close:
+                    raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
+                artifact_bytes = archive.extractfile(f'output/signals_{close}.json').read()
+                artifact = json.loads(artifact_bytes)
+                pointer = json.loads(archive.extractfile('output/latest_success.json').read())
+                if (artifact['scan_date'] != close or artifact['run_id'] != state['run_id'] or
+                        artifact.get('risk_state_saved') is not True or pointer.get('file') != f'signals_{close}.json' or
+                        pointer.get('scan_date') != close or pointer.get('run_id') != state['run_id'] or
+                        pointer.get('artifact_sha256') != digest(artifact_bytes) or pointer.get('state_sha256') != digest(state_bytes)):
+                    raise ValueError('COMPLETE_PUBLICATION_IDENTITY')
+                if archive.getmember(f'output/snapshots/{close}/manifest.json').isfile() is not True:
+                    raise ValueError('COMPLETE_SNAPSHOT_REQUIRED')
+            except (KeyError, AttributeError, TypeError, json.JSONDecodeError) as exc:
+                raise ValueError('COMPLETE_PUBLICATION_REQUIRED') from exc
         seen = set()
         for info in archive:
             path = PurePosixPath(info.name)
@@ -239,7 +288,9 @@ def restore(data: bytes, root: Path) -> None:
                     info.name in seen or total > MAX_EXPANDED):
                 raise ValueError('UNSAFE_BUNDLE')
             seen.add(info.name)
-            if not (path.parts[0] in {'cache', 'regime'} or info.name == 'output/risk_state.json'):
+            if not (path.parts[0] in {'cache', 'regime'} or info.name == 'output/risk_state.json' or
+                    (complete and (info.name in {f'output/signals_{close}.json', 'output/latest_success.json'} or
+                     info.name.startswith(f'output/snapshots/{close}/')))):
                 continue
             target = root.joinpath(*path.parts)
             if not target.resolve().is_relative_to(root.resolve()):

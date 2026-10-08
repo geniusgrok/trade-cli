@@ -184,12 +184,21 @@ def markdown(report: dict) -> str:
     data_date = report.get('data_date')
     if data_date is not None:
         checked_date(data_date)
+    simulation = report.get('simulation_identity', '')
+    if simulation not in ('', 'a92-inherited-v1'):
+        raise ValueError('UNKNOWN_SIMULATION_IDENTITY')
+    execution = '执行口径：生产固定起点模拟，仅作策略观察，不代表真实账户持仓或成交。'
+    if simulation:
+        close = checked_date(report['continuation']['previous_close'])
+        if report['continuation']['mode'] != 'native_full_checkpoint_resume':
+            raise ValueError('INDEPENDENT_CONTINUATION_REQUIRED')
+        execution = f'独立纸面系列：`{simulation}`；从 {close} 完整收盘状态原生续跑，不代表真实账户持仓或成交。'
     out = ['# Trade Core17 盘后日报', '',
            f'目标交易日：{target}；行情截止日：{data_date or MISSING}。',
            f'策略结果状态：**{STATUS[status]}（{status}）**。',
            f'实际生产源码版本：`{sha}`。',
            f'[查看本次计算的运行记录](https://github.com/geniusgrok/trade-cli/actions/runs/{run_id})。',
-           '执行口径：生产固定起点模拟，仅作策略观察，不代表真实账户持仓或成交。', '', '## 重点变化', '']
+           execution, '', '## 重点变化', '']
     comparison = report.get('comparison') or {}
     comparable = comparison.get('status') in {'有变化', '无变化'}
     out.append(f'比较日期：{previous or MISSING} → {target}。')
