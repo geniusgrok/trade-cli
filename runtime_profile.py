@@ -1,4 +1,4 @@
-"""One explicit inherited paper series; the scheduled legacy series stays default."""
+"""Approved inherited paper series; blank identity is retained for archived reads."""
 import os
 from pathlib import Path
 
@@ -25,6 +25,11 @@ def independent() -> bool:
     if name not in ('', INHERITED):
         raise ValueError('UNKNOWN_SIMULATION_IDENTITY')
     return name == INHERITED
+
+
+def require_writer() -> None:
+    if not independent():
+        raise ValueError('ARCHIVED_SERIES_READ_ONLY')
 
 
 def state_branch() -> str:

@@ -128,6 +128,7 @@ def verified_report(saved: dict, target: str, bundle: bytes) -> dict:
 
 
 def main() -> None:
+    profile.require_writer()
     import private_store as store
     source = profile.source_path()
     sys.path.insert(0, str(source))

@@ -40,28 +40,41 @@ def full_bundle(change=None):
 
 
 class IndependentSeriesTests(unittest.TestCase):
-    def test_local_input_paths_use_step_available_runner_context(self):
-        workflow = (Path(__file__).parents[1] / '.github/workflows/trade-inherited.yml').read_text()
+    def test_daily_default_and_schedule_share_the_approved_identity(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text()
+        self.assertIn("- cron: '6,36 9 * * 1-5'", workflow)
+        self.assertIn('  workflow_dispatch:', workflow)
+        self.assertIn("default: ''", workflow)
+        self.assertIn('TRADE_SIMULATION_IDENTITY: a92-inherited-v1', workflow)
+        self.assertIn("TARGET_DATE: ${{ inputs.target_date || '' }}", workflow)
+        self.assertIn("python-version: '3.12.14'", workflow)
+        self.assertIn('group: trade-a92-inherited-v1', workflow)
+        self.assertIn('cancel-in-progress: false', workflow)
+        self.assertNotIn('run: python seed_inherited.py', workflow)
+        self.assertNotIn('TRADE_LOCAL_', workflow)
+        self.assertIn('run: python runner.py', workflow)
+        self.assertIn('run: python publish_report.py', workflow)
         job_env = workflow.split('    env:\n', 1)[1].split('    steps:\n', 1)[0]
         self.assertNotIn('${{ runner.', job_env)
-        execution = workflow.split('      - name: 原生续跑并核验完整原件保存\n', 1)[1].split('      - name:', 1)[0]
-        self.assertIn('        env:\n', execution)
-        for kind in ('MARKET', 'REGIME'):
-            self.assertIn('TRADE_LOCAL_' + kind + '_DIR: ${{ runner.temp }}/trade-inherited-evidence/', execution)
+        checks = workflow.split('      - name: 核验文件、运行约束和公开文档\n', 1)[1].split('      - name:', 1)[0]
+        self.assertIn("TRADE_SIMULATION_IDENTITY: ''", checks)
 
-    def test_independent_workflow_is_manual_main_only_and_uses_existing_credentials(self):
+    def test_seed_import_is_manual_only_and_cannot_run_a_second_daily_session(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-inherited.yml').read_text()
         self.assertIn("github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'", workflow)
         self.assertNotIn('  schedule:', workflow)
         self.assertNotIn('  push:', workflow)
+        self.assertNotIn('target_date:', workflow)
         self.assertIn('group: trade-a92-inherited-v1', workflow)
+        self.assertIn('cancel-in-progress: false', workflow)
         self.assertIn('STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}', workflow)
         self.assertIn('TRADE_SIMULATION_IDENTITY: a92-inherited-v1', workflow)
         self.assertIn("TRADE_SIMULATION_IDENTITY: ''", workflow)
+        self.assertIn("TARGET_DATE: '2026-10-08'", workflow)
         self.assertLess(workflow.index('run: python bootstrap.py'), workflow.index('run: python seed_inherited.py'))
         self.assertLess(workflow.index('run: python seed_inherited.py'), workflow.index('run: python preflight.py'))
-        self.assertIn('run: python runner.py', workflow)
-        self.assertIn('run: python publish_report.py', workflow)
+        self.assertNotIn('run: python runner.py', workflow)
+        self.assertNotIn('run: python publish_report.py', workflow)
 
     def test_unknown_identity_never_falls_back_to_legacy(self):
         with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': 'typo'}):

@@ -8,10 +8,20 @@ from unittest.mock import Mock, patch
 
 import public_report as report
 import publish_report as publisher
+import runtime_profile as profile
 from test_publication import fixture
 
 
 class PublicationEntryTests(unittest.TestCase):
+    def test_archived_entry_cannot_read_or_publish_a_new_report(self):
+        with patch.dict('os.environ', {'TRADE_SIMULATION_IDENTITY': ''}), \
+             patch.object(publisher, 'publish') as publish, \
+             patch.object(profile, 'source_path') as source:
+            with self.assertRaisesRegex(ValueError, 'ARCHIVED_SERIES_READ_ONLY'):
+                publisher.main()
+        source.assert_not_called()
+        publish.assert_not_called()
+
     def test_daily_production_requires_the_repository_main_branch(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text()
         # A branch manual run must be stopped before reading or publishing state.
@@ -29,7 +39,8 @@ class PublicationEntryTests(unittest.TestCase):
                    'quantfusion.data': types.ModuleType('quantfusion.data'),
                    'quantfusion.data.sessions': sessions}
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {
-                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'schedule'}), \
+                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'schedule',
+                'TRADE_SIMULATION_IDENTITY': profile.INHERITED}), \
              patch.object(sys, 'path', sys.path.copy()), \
              patch.object(publisher, 'publish') as publish:
             with self.assertRaisesRegex(ValueError, 'RESULT_NOT_FINISHED'):
@@ -51,7 +62,8 @@ class PublicationEntryTests(unittest.TestCase):
                    'quantfusion.data': types.ModuleType('quantfusion.data'),
                    'quantfusion.data.sessions': sessions}
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {
-                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'schedule'}), \
+                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'schedule',
+                'TRADE_SIMULATION_IDENTITY': profile.INHERITED}), \
              patch.object(sys, 'path', sys.path.copy()), \
              patch.object(publisher, 'verified_report', return_value=value), \
              patch.object(publisher, 'publish', return_value={'path':'reports/2026-09-22.md'}) as publish, \
@@ -76,7 +88,8 @@ class PublicationEntryTests(unittest.TestCase):
                    'quantfusion.data.sessions': sessions}
         proof = {'path': 'reports/2026-09-22.md', 'sha256': 'a' * 64}
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {
-                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'push'}), \
+                'RUNNER_TEMP': '/tmp/test-publication', 'GITHUB_EVENT_NAME': 'push',
+                'TRADE_SIMULATION_IDENTITY': profile.INHERITED}), \
              patch.object(sys, 'path', sys.path.copy()), \
              patch.object(publisher, 'verified_report', return_value=value), \
              patch.object(publisher, 'publish', return_value=proof) as publish, \

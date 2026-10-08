@@ -10,14 +10,14 @@
     "sha256": "9cc21f2f5cb7668e899aeb3b49fe57a8db239d7fc381844679ac1d561f7921c6"
   },
   ".github/workflows/trade-daily.yml": {
-    "bytes": 2168,
-    "git_blob": "09dedfb8805311ceded2cd462a04432b99ddcb5b",
-    "sha256": "3d6d33d9ef0bad31a2b422e81450db9c7af86c5bc393bf594523f5a224f1fb67"
+    "bytes": 2290,
+    "git_blob": "6dcfda24b6aebbe360e796bddd6d97ee9298e287",
+    "sha256": "58f89056d421e9df94fafa072ef4528d173e9d53df137bce7303dcebd535b895"
   },
   ".github/workflows/trade-inherited.yml": {
-    "bytes": 2513,
-    "git_blob": "f6c6e504eaef6cd45f95825ccfa170f6c0f74ec0",
-    "sha256": "4058f84afc22ef26c0e2e8dbc9773436a358c5072da3210ec778e19275567245"
+    "bytes": 1917,
+    "git_blob": "732f45b1472cb2beb8e9fd13912f4f5fa23a8cbc",
+    "sha256": "3f65416b5ad3ca3aec1081d7d279beadfa0668c2a878275f4858d258beb96e6e"
   },
   ".gitignore": {
     "bytes": 53,
@@ -25,9 +25,9 @@
     "sha256": "25458055814c6879f590d21a27a5a29e34fddbb5a0eecce2dab53b110525ed20"
   },
   "README.md": {
-    "bytes": 7178,
-    "git_blob": "8660b9a8700ef7f6de240ec8dae59c24f7b41cc0",
-    "sha256": "679d7344d3f7a176ad0980158c68584c875682b24bfdef1e1fe6452696a6ad2a"
+    "bytes": 7760,
+    "git_blob": "61624ee8d89a1fdb3851b3f9636fed120e1ea2ac",
+    "sha256": "af717f2041e51d2350d4e3f85a35c76abe1e9aa020d3e01ad9081bd211961a62"
   },
   "approved_seed.enc": {
     "bytes": 645120,
@@ -60,9 +60,9 @@
     "sha256": "8c6f3780d9ff8d8e3635c5d432b47585b5ae07b1226f55c30a5c06fcd152e5dd"
   },
   "private_store.py": {
-    "bytes": 16662,
-    "git_blob": "d560ac046e3873f8492481755739fde3be5c4a3f",
-    "sha256": "02b98d32156fe81a6075d0cc97f36a1342033a81cd0c2da621f9fcf2b75e1037"
+    "bytes": 17493,
+    "git_blob": "ecdb0c1bc92e324f180b0e739dbb5bccf1f80745",
+    "sha256": "77e4a1c511c6c13b45b457137c77180e4c4b4ca006772cdeeebf2d7024e099bc"
   },
   "public_report.py": {
     "bytes": 15152,
@@ -70,9 +70,9 @@
     "sha256": "0fd760b5b0d8ff1e513febdd807e6c4530697dc8e7338ff4321cb9601e24178c"
   },
   "publish_report.py": {
-    "bytes": 6868,
-    "git_blob": "3c43ae639978d64e88b538fc7c014cc63af091d4",
-    "sha256": "9d612cc19e28111f9e17b3f30a536b69d72c56e4e15b45316cc1219f43a95e4e"
+    "bytes": 6897,
+    "git_blob": "9c6c9251e0d54358b76127670b2a34e692805e63",
+    "sha256": "afc308f6a5292889026fff9ab0c4949aabdb2f3105543a62f6ad9868099ae37f"
   },
   "report.py": {
     "bytes": 6663,
@@ -80,14 +80,14 @@
     "sha256": "63d96ce0eaca5e394abe045f40d700f8b9e0bba821bf7c009296e9bf8a30397c"
   },
   "runner.py": {
-    "bytes": 19178,
-    "git_blob": "c9eec10b895e21a4d3c3028b2e882d3f783a6d22",
-    "sha256": "263ef2cf3fe0cd464bb4c96cf3aa511750d55275e7504c0f1c60c3ee9f77e9cb"
+    "bytes": 27672,
+    "git_blob": "8ed2de0deae98b06fbaa2627e2e7f2f305300f22",
+    "sha256": "2a7d228cb4fbf8e34f32c562614f02df843454f40931cb769a20d2644c28bd1b"
   },
   "runtime_profile.py": {
-    "bytes": 2370,
-    "git_blob": "1ed0c046bc8411ae565cada03fdd76162d1bee62",
-    "sha256": "6c9aef79844182d92289e2ca1f703f1b1553f8c7ce43e9b41d275b8e22e18cfc"
+    "bytes": 2482,
+    "git_blob": "818761c9df37e75e6e6d4aae4633765973602a90",
+    "sha256": "b58d07b8dccc896f4e7ae152900ce40972722591d619aec0b7db38ea14852495"
   },
   "seed_contract.py": {
     "bytes": 6235,
@@ -109,10 +109,15 @@
     "git_blob": "d9c80bbe4caf7dcb4deee16b586ae95079f9e8ab",
     "sha256": "d6acd22d567e73ad28504e73b8b1152972725f751cf760075eac07517ee32e28"
   },
+  "tests/test_daily_resume.py": {
+    "bytes": 26432,
+    "git_blob": "db1de95805182059841bf2cbb6e541af2d6258dd",
+    "sha256": "d8648c9f80a1dc10587de8c46b74707ad4f80ce68c231eaf6e0e7ab5de241f0d"
+  },
   "tests/test_independent_series.py": {
-    "bytes": 10425,
-    "git_blob": "4ce0b9381dd88a6960921e0d6939becb6f06ed29",
-    "sha256": "6782c937b486bef42f75d675a15d6e8c832ceca1c4a24b8686df71d7586ef0d5"
+    "bytes": 11202,
+    "git_blob": "f16a49676d8e7a13e12d796ca66cf66a1d00c7f0",
+    "sha256": "601fed316ba5fba837e1e8bc31d124622026458ffe3ba7e89fdaa0ea3079d116"
   },
   "tests/test_index_preparation.py": {
     "bytes": 2608,
@@ -125,9 +130,14 @@
     "sha256": "cd28c17e3d9c42aec17de27c5f3357ccf6b3c39262aba0700b078818fe83b034"
   },
   "tests/test_publication_entry.py": {
-    "bytes": 5095,
-    "git_blob": "7e91ecc12e68d525fc1292811d0373c4187b61b2",
-    "sha256": "b9683b830e7ef8b31fa4ea3e2c07ec2f5d949839428b5c5246be36d288cb9b50"
+    "bytes": 5778,
+    "git_blob": "7b2b85bc31b3e4c52c568a170f4bd2a110dfaef7",
+    "sha256": "1e7bc88674f4f9ef56d9b5dbaf837f5b6308f37471bd9a1c759739a144d1aff9"
+  },
+  "tests/test_resume_retry.py": {
+    "bytes": 4182,
+    "git_blob": "9890ecad7fad487d6e847497b82cec2aeee09daa",
+    "sha256": "8bf4e3168844bb09572c7affaf5f7e1f886a25ef98263772556aad215eef3850"
   },
   "tests/test_risk_inputs.py": {
     "bytes": 3491,
@@ -135,9 +145,9 @@
     "sha256": "cc144ec2dbf8cb563fe4267095e8e994372c304c303aa18a9c013869844233e4"
   },
   "tests/test_runner.py": {
-    "bytes": 10682,
-    "git_blob": "1a739c26272d9a4f6b4fa18aed90dda7e3de5ce5",
-    "sha256": "824498b04017a4e59dde0bce188261cd811553654755a6fc396b7d82c0b53663"
+    "bytes": 11360,
+    "git_blob": "d4c8c40bbb15e71f32314b985b3e8b8543fe0da7",
+    "sha256": "fa65c543d958b6bd90c287888ae9b2ff205a56a1521c33e37398d4bdb9d9a052"
   },
   "tests/test_saved_diagnosis.py": {
     "bytes": 7285,
