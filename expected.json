@@ -1,0 +1,57 @@
+{
+  "config_fingerprint_sha256": "627a269e9e80960190fcdb783fbdcbc1d5a19431dd9c7e5c0ad56e0d5913835b",
+  "identity": "a92-inherited-v1",
+  "input_evidence": {
+    "kind": "provider_full_history_recovery",
+    "original_bundle_sha256": "e72529cd310c61393f7016d6ce400e7349ec50ae0a32ffb2887e130dd33e1050",
+    "recovery_receipt_sha256": "51ac295e3e29a5aee80638152b4caff840aab87e45103ecad55554f0c6afd794"
+  },
+  "legacy_commit": "9cbb3d2a7648715422ff41739de621e9d4c12b5f",
+  "native_identity": {
+    "calendar_sha256": "9177f84dd29811a0f4a56c922b4482fc41b5e999c654bacb6862515bdfe9e34e",
+    "requirements_lock_sha256": "c81024bd3457e3034fa4ee34fa6e1bdc9382c5cded119acacf4917413177f44e",
+    "runtime": {
+      "numpy": "2.5.1",
+      "pandas": "3.0.5",
+      "python": "3.12.14"
+    },
+    "source_sha256": "8dd54caf07e284cf64a3e2091a5c300439fa1958a87896973cf7e660d88bc3be"
+  },
+  "public_report": {
+    "bytes": 7003,
+    "commit": "3afc6e4c52b0786a08e02b63079332193d833b53",
+    "git_blob_oid": "f32c729fd7f66dd15a29fe19faa5d2aaafe6c7cc",
+    "path": "reports/a92-inherited-v1/2026-10-08.md",
+    "sha256": "b34209a166e42afd569c8c99e97ba3c81b4f47ac0947478d3cb4a3a86b35118c"
+  },
+  "records": [
+    {
+      "actions_run_id": "37780674396",
+      "cipher_bytes": 905919,
+      "cipher_oid": "0045a6db08c746a17ce6f24431f22dbfe7f70c5a",
+      "cipher_sha256": "725b12d157afc6991bf109a591b29c133e73de39cccc7d78975bb568710b0c4b",
+      "date": "2026-09-30",
+      "status": "DEGRADED"
+    },
+    {
+      "actions_run_id": "37780674396",
+      "cipher_bytes": 1316468,
+      "cipher_oid": "fa86080fc88d8ae7dfe1373f2877a2592c1bab71",
+      "cipher_sha256": "5f00b48ec356361c1178838cc95ff472c6dc96055abb4682fa0b0c4cefa49eaa",
+      "date": "2026-10-08",
+      "status": "DEGRADED"
+    }
+  ],
+  "schema_version": 1,
+  "seed_import": {
+    "manifest_sha256": "ed0af8dcc5980c50fdaa78c9a7e0cee6695f90f6fec8ceba080f68283396ab56",
+    "plaintext_sha256": "db3657f80bcf344aa09af57123c2e3527d0c654d71eceb1dad1756b64f8efe0c",
+    "seed_artifact_sha256": "14ffa26219b8ed371d217ba47f54f8c4f87969adac6a79b3d26cf6e00aafb1b2",
+    "seed_bundle_sha256": "a1c80a9ae5caf987df2f1fc5028e526e2ee4b13a9d7318bdd5034799f1087607",
+    "seed_snapshot_manifest_sha256": "77d2f23dc43d0fae2bece8a99821aabe37f9d6593d247f1b5088bb4b02fc1482",
+    "seed_state_sha256": "67a61739a04d1c89a2fb613c414aca912425d2f70b9222047cdd85f122f26bc8"
+  },
+  "source": "a92d79dad4fc21d38aab26a36f31f58a34b2dd62",
+  "state_commit": "13cada82682d108d909fbe4946ce13d27f780c26",
+  "workflow_sha": "ef462740aec2b429ece6b778099041788a7ef1e6"
+}
