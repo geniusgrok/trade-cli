@@ -79,7 +79,13 @@ def read_evidence():
                 m.name if public_path else hashlib.sha256(m.name.encode()).hexdigest(),
                 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
     risk = json.loads(members['output/risk_state.json'])
-    if risk != value['risk_state'] or json.loads(members['output/daily_report.json']) != value['report']:
+    # Failed identity admission retained the authenticated previous risk file,
+    # while this day's finished record deliberately has no committed risk state.
+    previous_risk_sha = hashlib.sha256(json.dumps(risk, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    if (value['risk_state'] is not None
+            or previous_risk_sha != '100d999b4a83dae67693c586b86d5b31e0644c9570080e720b07b62d00af02c5'
+            or json.loads(members['output/daily_report.json']) != value['report']):
         raise ValueError('OLD_REPORT_STATE_BINDING')
     manifest_path = 'output/snapshots/2026-10-08/manifest.json'
     manifest_raw = members[manifest_path]
