@@ -40,6 +40,15 @@ def full_bundle(change=None):
 
 
 class IndependentSeriesTests(unittest.TestCase):
+    def test_local_input_paths_use_step_available_runner_context(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/trade-inherited.yml').read_text()
+        job_env = workflow.split('    env:\n', 1)[1].split('    steps:\n', 1)[0]
+        self.assertNotIn('${{ runner.', job_env)
+        execution = workflow.split('      - name: 原生续跑并核验完整原件保存\n', 1)[1].split('      - name:', 1)[0]
+        self.assertIn('        env:\n', execution)
+        for kind in ('MARKET', 'REGIME'):
+            self.assertIn('TRADE_LOCAL_' + kind + '_DIR: ${{ runner.temp }}/trade-inherited-evidence/', execution)
+
     def test_independent_workflow_is_manual_main_only_and_uses_existing_credentials(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-inherited.yml').read_text()
         self.assertIn("github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'", workflow)
