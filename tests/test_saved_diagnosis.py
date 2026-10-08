@@ -54,6 +54,13 @@ def saved(day, config, *, tamper=False, absent=False):
 
 
 class SavedDiagnosisTests(unittest.TestCase):
+    def test_workflow_keeps_unhashed_crypto_out_of_hash_locked_source_install(self):
+        workflow = Path(__file__).resolve().parents[1] / '.github/workflows/saved-evidence.yml'
+        commands = [line.strip().removeprefix('- run: ') for line in workflow.read_text().splitlines()
+            if line.strip().startswith('- run: python -m pip install')]
+        self.assertEqual(commands, ["python -m pip install 'cryptography==46.0.0'",
+            'python -m pip install -r .runtime/production/requirements-lock.txt'])
+
     def test_date_history_and_manifest_are_actual_bundle_facts(self):
         facts = diagnosis.inspect_saved(saved('2026-10-08', CURRENT), '2026-10-08', ['920045'])
         self.assertEqual(facts['coverage'][0]['pre_start_bars'], 2)

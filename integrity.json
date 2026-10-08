@@ -5,9 +5,9 @@
     "sha256": "cbfdea15f1a357ef2b453ce89720978bb9e7666e269d8cac2eedf226f6541282"
   },
   ".github/workflows/saved-evidence.yml": {
-    "bytes": 1434,
-    "git_blob": "70e65fd78bcfb40d83e1fcfd3145207ccde643e2",
-    "sha256": "ad92b74ca6138a75f02ac577e449f05504028a8335ab0c5fe752f75cf2527ac4"
+    "bytes": 1469,
+    "git_blob": "49fc2aa69477b6f736cf8241fb189adcff852b91",
+    "sha256": "9cc21f2f5cb7668e899aeb3b49fe57a8db239d7fc381844679ac1d561f7921c6"
   },
   ".github/workflows/trade-daily.yml": {
     "bytes": 2168,
@@ -95,9 +95,9 @@
     "sha256": "824498b04017a4e59dde0bce188261cd811553654755a6fc396b7d82c0b53663"
   },
   "tests/test_saved_diagnosis.py": {
-    "bytes": 6761,
-    "git_blob": "84a225b83b429a6a6cca7e137eaaeea04b1658cd",
-    "sha256": "7bc40d4f2e573aa0e804166d64347088d25cc6d57871f083759799a64269dc47"
+    "bytes": 7285,
+    "git_blob": "1ddfea45efc0c62ccbec6153c0c02367d00807ff",
+    "sha256": "f512d8ec247d661161c2b850ed6f7d93c78e13baaca5905c48909cf44d1def5b"
   },
   "verify_integrity.py": {
     "bytes": 772,
