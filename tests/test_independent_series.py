@@ -82,7 +82,9 @@ class IndependentSeriesTests(unittest.TestCase):
 
     def test_store_rejects_cross_series_records_and_wrong_producer(self):
         good = {'simulation_identity': profile.INHERITED, 'strategy_sha': profile.SOURCE_SHA,
-                'report': {'simulation_identity': profile.INHERITED, 'strategy_sha': profile.SOURCE_SHA}}
+                'state_origin': profile.STATE_ORIGIN,
+                'report': {'simulation_identity': profile.INHERITED, 'strategy_sha': profile.SOURCE_SHA,
+                           'state_origin': profile.STATE_ORIGIN}}
         with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': profile.INHERITED}):
             profile.require_record(good)
             for change in ({'simulation_identity': ''}, {'strategy_sha': 'b' * 40},
@@ -104,7 +106,7 @@ class IndependentSeriesTests(unittest.TestCase):
 
     def test_unknown_previous_terminal_status_never_starts_a_new_close(self):
         unknown = {'status': 'UNKNOWN', 'simulation_identity': profile.INHERITED,
-                   'strategy_sha': profile.SOURCE_SHA}
+                   'strategy_sha': profile.SOURCE_SHA, 'state_origin': profile.STATE_ORIGIN}
         with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': profile.INHERITED}), \
              patch('private_store._snapshot', return_value=('head', 'tree', {'runs/2026-09-30.json.enc': 'blob'})), \
              patch('private_store._read', side_effect=[None, unknown]), \
@@ -129,6 +131,7 @@ class IndependentSeriesTests(unittest.TestCase):
 
     def test_publication_only_creates_the_independent_report_path(self):
         value = {**fixture(), 'simulation_identity': profile.INHERITED,
+                 'state_origin': profile.STATE_ORIGIN,
                  'continuation': {'mode': 'native_full_checkpoint_resume', 'previous_close': '2026-09-21'}}
         text = public_report.markdown(value)
         self.assertIn('a92-inherited-v1', text)

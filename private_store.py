@@ -132,6 +132,8 @@ def request(route: str, payload: dict) -> dict:
                 previous = {'date': candidate[5:15], 'strategy_sha': record['report']['strategy_sha'],
                             'risk_state': record['risk_state'], 'bundle': record['bundle'],
                             'bundle_sha256': record['sha256'], 'profile': record['report'].get('profile', {})}
+                if profile.independent():
+                    previous['state_origin'] = record['state_origin'].copy()
                 break
         compare = _read(_path(payload['compare_date']), files) if payload.get('compare_date') else None
         profile.require_record(compare)
@@ -155,6 +157,9 @@ def request(route: str, payload: dict) -> dict:
                   'strategy_sha': payload['strategy_sha'], 'previous_date': payload.get('previous_date')}
         if profile.independent():
             record['simulation_identity'] = profile.INHERITED
+            if prior is None:
+                raise ValueError('INHERITED_SEED_REQUIRED')
+            record['state_origin'] = prior['state_origin'].copy()
         profile.require_record(record)
         try:
             _commit(path, record, head, tree, files)
@@ -178,6 +183,9 @@ def request(route: str, payload: dict) -> dict:
         if profile.independent():
             if report.get('simulation_identity') != profile.INHERITED:
                 raise ValueError('INDEPENDENT_REPORT_IDENTITY')
+            profile.require_origin(report.get('state_origin'))
+            if report['state_origin'] != current['state_origin']:
+                raise ValueError('INDEPENDENT_STATE_ORIGIN')
             if status in ('SUCCESS', 'DEGRADED') and (payload['risk_state'] or {}).get('schema_version') != 2:
                 raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
         decode_bundle(payload['bundle'], payload['sha256'])

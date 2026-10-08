@@ -207,6 +207,9 @@ def run() -> tuple[int, str]:
             previous = context.get('previous')
             if series.independent() and not previous:
                 raise ValueError('INHERITED_SEED_REQUIRED')
+            if series.independent():
+                series.require_origin(previous.get('state_origin'))
+                report['state_origin'] = previous['state_origin'].copy()
             if previous:
                 bundle = store.decode_bundle(previous['bundle'], previous['bundle_sha256'])
                 if series.independent():
@@ -234,6 +237,10 @@ def run() -> tuple[int, str]:
             if local_market:
                 shutil.copytree(Path(os.environ['TRADE_LOCAL_REGIME_DIR']), root / 'regime', dirs_exist_ok=True)
                 arguments.extend(['--local-market-dir', local_market])
+                import seed_contract
+                provenance = seed_contract.strict_json((Path(local_market).parent / 'provenance.json').read_bytes())
+                seed_contract.require_evidence_provenance(provenance)
+                report['input_evidence'] = provenance
             args = build_argument_parser().parse_args(arguments)
             dates = resolve_scan_dates(target)
             def build_context():

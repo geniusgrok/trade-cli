@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from typing import Any
+import runtime_profile as series
 
 MISSING = '未提供'
 
@@ -70,10 +71,16 @@ def compare(report: dict, previous: dict | None, previous_date: str) -> dict:
 
 
 def markdown(report: dict) -> str:
+    execution = '生产固定起点模拟，不代表真实账户持仓或成交。'
+    if report.get('simulation_identity'):
+        if report['simulation_identity'] != series.INHERITED:
+            raise ValueError('UNKNOWN_SIMULATION_IDENTITY')
+        series.require_origin(report.get('state_origin'))
+        execution = '独立完整账户续跑；基线经济历程由旧生产者事后重建，不代表真实账户持仓或成交。'
     out = ['# Trade Core17 盘后策略观察', '',
            f"状态：{report['status']}；目标交易日：{report['target_date']}；行情截止：{report.get('data_date', MISSING)}。",
            f"策略源码 SHA：`{report['strategy_sha']}`；[Actions Run]({report['actions_run_url']})。",
-           f"运行来源：{report['trigger']}；执行口径：生产固定起点模拟，不代表真实账户持仓或成交。", '', '## 重点变化', '']
+           f"运行来源：{report['trigger']}；执行口径：{execution}", '', '## 重点变化', '']
     comparison = report.get('comparison', {'status': '不可比较', 'reason': '没有合格结果'})
     out.append(f"对比日期：{report.get('previous_trading_date', MISSING)} → {report['target_date']}；{comparison['status']}。")
     if comparison.get('reason'):
