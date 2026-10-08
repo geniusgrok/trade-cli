@@ -37,21 +37,22 @@ class NativePreparationRetryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             contexts, waits, stages = [], [], []
             def build():
-                ctx = object()
+                ctx = SimpleNamespace(scan_dates={'symbol_eligibility': {'300308': {
+                    'status': 'SESSION_REQUIRED', 'required_quote_date': '2026-09-22'}}})
                 contexts.append(ctx)
                 return ctx
             def before(ctx):
                 stages.append(('index', ctx))
                 if len(contexts) == 1:
-                    raise ValueError('INDEX_EVIDENCE_UNAVAILABLE: TRADING_DAY_COVERAGE')
+                    raise ValueError('INDEX_EVIDENCE_UNAVAILABLE:000300: TRADING_DAY_COVERAGE:INDEX:000300: expected=2026-09-22; observed=2026-09-21; missing bar or conflicting/unverified suspension')
             def after(ctx):
                 stages.append(('risk', ctx))
                 if len(contexts) == 2:
-                    raise ValueError('TRADING_DAY_COVERAGE:risk')
+                    raise ValueError('TRADING_DAY_COVERAGE:300308: expected=2026-09-22; observed=2026-09-21; missing bar or conflicting/unverified suspension')
             with (Path(directory) / 'native.log').open('w', encoding='utf-8') as log:
                 result = prepare_native_with_retry(build, None, log,
                     lambda ctx, load: True, lambda ctx: True, waits.append,
-                    before=before, after=after)
+                    before=before, after=after, pending_session=('2026-09-22', '2026-09-21'))
             self.assertIs(result, contexts[2])
             self.assertEqual(waits, [600, 600])
             self.assertEqual(stages, [('index', contexts[0]), ('index', contexts[1]),
@@ -61,17 +62,18 @@ class NativePreparationRetryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             contexts, waits = [], []
             def build():
-                ctx = object()
+                ctx = SimpleNamespace(scan_dates={'symbol_eligibility': {'300308': {
+                    'status': 'SESSION_REQUIRED', 'required_quote_date': '2026-09-22'}}})
                 contexts.append(ctx)
                 return ctx
             def probe(ctx):
                 if len(contexts) == 1:
-                    print('TRADING_DAY_COVERAGE:300308', file=log)
+                    print('TRADING_DAY_COVERAGE:300308: expected=2026-09-22; observed=2026-09-21; missing bar or conflicting/unverified suspension', file=log)
                     return False
                 return True
             with (Path(directory) / 'native.log').open('w', encoding='utf-8') as log:
                 result = prepare_native_with_retry(build, None, log,
-                    lambda ctx, load: True, probe, waits.append)
+                    lambda ctx, load: True, probe, waits.append, pending_session=('2026-09-22', '2026-09-21'))
             self.assertIs(result, contexts[1])
             self.assertEqual(len(contexts), 2)
             self.assertEqual(waits, [600])

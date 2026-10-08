@@ -19,6 +19,10 @@ import private_store as store
 import report as reporting
 import runtime_profile as series
 
+CHECKPOINT_SECTIONS = {'schema_version', 'last_completed_close', 'dates', 'initial_capital', 'engine_cfg', 'engine_policy',
+    'effective_policy', 'account_risk_policy', 'engine', 'tail_policies', 'sleeves', 'portfolio_risk', 'run', 'overlay',
+    'last_opinion', 'last_agreement', 'controller', 'budget'}
+
 
 def identity(source: Path) -> dict:
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
@@ -99,8 +103,28 @@ def prepare_risk_inputs(ctx) -> dict:
     return evidence_dates
 
 
+def current_bar_pending(message: str, target: str, previous_date: str, eligibility: dict) -> bool:
+    """Only a proved one-session tail absence may wait; other errors stay errors."""
+    grammar = r'TRADING_DAY_COVERAGE:(INDEX:)?([0-9]{6}): expected=([0-9-]{10}); observed=([0-9-]{10}); missing bar or conflicting/unverified suspension'
+    matches = re.findall(grammar, message)
+    if not matches or any(expected != target or observed != previous_date for _, _, expected, observed in matches):
+        return False
+    if any(not index and (eligibility.get(code, {}).get('status') != 'SESSION_REQUIRED' or
+            eligibility[code].get('required_quote_date') != target) for index, code, _, _ in matches):
+        return False
+    # Native probe prints the complete fatal reasons again after its summary.
+    reasons = re.findall(r'^\s+[0-9]{6} [^\n]+?: (.+)$', message, re.MULTILINE)
+    if reasons and any(not re.fullmatch(r'TRADING_DAY_COVERAGE:[0-9]{6}: expected=' + re.escape(target) +
+            r'; observed=' + re.escape(previous_date) + r'; missing bar or conflicting/unverified suspension', reason) for reason in reasons):
+        return False
+    if not reasons and re.fullmatch(r'(?:INDEX_EVIDENCE_UNAVAILABLE:[0-9]{6}: )?' + grammar, message.strip()) is None:
+        return False
+    return not any(marker in message for marker in ('INVALID_EVIDENCE', 'FUTURE_EVIDENCE', 'PROVIDER_STALE_OR_AGE',
+        'history refresh failed', 'using cached data only', 'PRE_LISTING_EVIDENCE_CONFLICT', 'checkpoint', 'Unable to refresh index'))
+
+
 def prepare_native_with_retry(build_context, load_risk, log, prepare, probe, pause=clock.sleep,
-                              *, before=None, after=None):
+                              *, before=None, after=None, pending_session=None):
     """Wait for delayed index, stock and risk bars before the one daily replay."""
     for attempt in range(3):
         ctx = build_context()  # A failed probe may have partially populated its context.
@@ -118,27 +142,93 @@ def prepare_native_with_retry(build_context, load_risk, log, prepare, probe, pau
             log.flush()
             with Path(log.name).open('rb') as evidence:
                 evidence.seek(start)
-                coverage_pending = b'TRADING_DAY_COVERAGE' in evidence.read()
+                message = evidence.read().decode('utf-8', errors='replace')
+                coverage_pending = pending_session is not None and current_bar_pending(message, *pending_session,
+                    getattr(ctx, 'scan_dates', {}).get('symbol_eligibility', {}))
         except (ValueError, RuntimeError) as exc:
-            coverage_pending = ('TRADING_DAY_COVERAGE' in str(exc) or
-                                'INDEX_EVIDENCE_UNAVAILABLE' in str(exc) or
-                                'RISK_INPUT_UNAVAILABLE' in str(exc) or
-                                'Unable to refresh index' in str(exc))
+            coverage_pending = pending_session is not None and current_bar_pending(str(exc), *pending_session,
+                getattr(ctx, 'scan_dates', {}).get('symbol_eligibility', {}))
             if not coverage_pending:
                 raise
             if attempt == 2:
-                raise ValueError('NATIVE_PREPARATION_FAILED') from exc
-        if not coverage_pending or attempt == 2:
+                raise ValueError('CURRENT_BAR_UNAVAILABLE') from exc
+        if coverage_pending and attempt == 2:
+            raise ValueError('CURRENT_BAR_UNAVAILABLE')
+        if not coverage_pending:
             break
         print('  当日行情覆盖尚未齐全，等待 10 分钟重新取数。')
         pause(600)
     raise ValueError('NATIVE_PREPARATION_FAILED')
 
 
+def require_resume_interval(ctx, calendar, previous_close: str) -> dict:
+    """Every unprocessed official session has evidence, with native event facts."""
+    import pandas as pd
+    from quantfusion.data.sessions import require_frame_coverage, stock_eligibility
+    from quantfusion.data.contracts import _normalize_index_frame
+    from quantfusion.config.overlay import RISK_BASKET
+    from quantfusion.config.portfolio import PortfolioPolicy
+
+    target = ctx.request.end_date
+    sessions = [day for day in calendar.sessions if previous_close < day <= target]
+    if previous_close not in calendar.sessions or not sessions or sessions[-1] != target:
+        raise ValueError('RESUME_INTERVAL_INVALID')
+    economic_codes = set(ctx.tradable) | set(PortfolioPolicy().regime_symbols)
+    required = set(ctx.symbols) | set(RISK_BASKET) | set(PortfolioPolicy().regime_symbols)
+    if not ctx.snapshot_frames or set(ctx.snapshot_frames) != required:
+        raise ValueError('RESUME_FRAME_INVENTORY')
+    frames = [(code, frame, False) for code, frame in ctx.snapshot_frames.items()]
+    for code in ('000300', '000682'):
+        frame = _normalize_index_frame(pd.read_csv(Path(ctx.request.regime_data_dir) / f'{code}.csv'), end_date=target)
+        frame.index = pd.DatetimeIndex(frame['date'])
+        frames.append(('INDEX:' + code, frame, True))
+    economic_dates = set()
+    for code, frame, index in frames:
+        observed = [stamp.strftime('%Y-%m-%d') for stamp in frame.index]
+        if any(day > target or (previous_close < day <= target and day not in sessions) for day in observed):
+            raise ValueError('RESUME_UNEXPECTED_EVIDENCE_DATE')
+        if code in economic_codes:
+            economic_dates.update(day for day in observed if previous_close < day <= target)
+        for day in sessions:
+            dates = {**ctx.scan_dates, 'requested_as_of': day, 'required_evidence_date': day}
+            prefix = frame.loc[:day]
+            if not index and stock_eligibility(code, dates)['status'] == 'PRE_LISTING':
+                if not prefix.empty:
+                    raise ValueError('RESUME_PRE_LISTING_CONFLICT')
+                continue
+            try:
+                require_frame_coverage(prefix, dates, code, allow_certified_suspension=not index)
+            except ValueError as exc:
+                if day != target:
+                    raise ValueError('RESUME_HISTORY_GAP') from exc
+                raise
+    if economic_dates != set(sessions):
+        raise ValueError('RESUME_ECONOMIC_SESSION_MISSING')
+    return {'previous_close': previous_close, 'sessions': sessions, 'stock_count': len(ctx.snapshot_frames), 'index_count': 2}
+
+
 def existing_result_outcome(existing: dict) -> str:
     if existing['status'] not in ('SUCCESS', 'DEGRADED'):
         raise ValueError('EXISTING_RESULT_UNUSABLE:' + existing['status'])
     return 'EXISTING_RESULT_' + existing['status']
+
+
+def failure_reason(exc: Exception) -> str:
+    """Public logs carry fixed categories; detailed evidence stays encrypted."""
+    message = str(exc)
+    if message == 'checkpoint observed input prefix changed (qfq vintage UNKNOWN)':
+        return 'CHECKPOINT_HISTORY_CHANGED'
+    if message == 'checkpoint source/runtime/config/calendar/pool identity changed':
+        return 'CHECKPOINT_IDENTITY_CHANGED'
+    code = message.split(':', 1)[0]
+    allowed = {'ARCHIVED_SERIES_READ_ONLY', 'UNKNOWN_SIMULATION_IDENTITY', 'EXISTING_RESULT_UNUSABLE',
+        'PREVIOUS_RUN_UNRESOLVED', 'COMPLETE_INHERITED_STATE_REQUIRED', 'COMPLETE_EXISTING_RESULT_REQUIRED',
+        'COMPLETE_PUBLICATION_REQUIRED', 'COMPLETE_PUBLICATION_IDENTITY', 'COMPLETE_SNAPSHOT_REQUIRED',
+        'INHERITED_SEED_REQUIRED', 'OUT_OF_ORDER_DATE', 'RESTORED_STATE_MISMATCH', 'RESTORED_CLOSE_DATE_MISMATCH',
+        'CURRENT_BAR_UNAVAILABLE', 'NATIVE_PREPARATION_FAILED', 'RESUME_INTERVAL_INVALID', 'RESUME_FRAME_INVENTORY',
+        'RESUME_UNEXPECTED_EVIDENCE_DATE', 'RESUME_PRE_LISTING_CONFLICT', 'RESUME_HISTORY_GAP',
+        'RESUME_ECONOMIC_SESSION_MISSING', 'FROZEN_INDEX_IDENTITY_MISMATCH', 'BUNDLE_INTEGRITY', 'UNSAFE_BUNDLE'}
+    return code if code in allowed else 'PRODUCTION_VALIDATION_FAILED'
 
 
 def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dict:
@@ -166,6 +256,7 @@ def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dic
 
 
 def run() -> tuple[int, str]:
+    series.require_writer()
     source = series.source_path()
     root = Path(os.environ['RUNNER_TEMP']) / 'trade-runtime'
     (root / 'logs').mkdir(parents=True, exist_ok=True)
@@ -189,7 +280,7 @@ def run() -> tuple[int, str]:
             from quantfusion.application.daily_replay import run_simulation
             from quantfusion.application.daily_output import build_scan_artifact
             from quantfusion.application.daily_publication import publish_scan
-            from quantfusion.io.state_store import load_prev_risk_state, save_risk_state
+            from quantfusion.io.state_store import load_prev_risk_state, save_risk_state, validate_risk_state, require_completed_publication
 
             calendar = load_calendar()
             target, previous_date, gate = resolve_target(calendar, datetime.now(ZoneInfo('Asia/Shanghai')), os.environ.get('TARGET_DATE', ''), ident['trigger'])
@@ -203,7 +294,22 @@ def run() -> tuple[int, str]:
                 raise ValueError('PRODUCTION_CORE17_IDENTITY')
             context = store.request('context', {'date': target, 'compare_date': previous_date})
             if context.get('existing'):
-                return 0, existing_result_outcome(context['existing'])
+                saved = context['existing']
+                outcome = existing_result_outcome(saved)
+                from publish_report import verified_report
+                bundle = store.decode_bundle(saved['bundle'], saved['sha256'])
+                verified_report(saved, target, bundle)
+                store.restore(bundle, root, complete=True)
+                state = json.loads((output / 'risk_state.json').read_text())
+                sections = state.get('checkpoint', {}).get('state', {})
+                if (state != saved['risk_state'] or state.get('scan_date') != target or validate_risk_state(state) is not None or
+                        set(sections) != CHECKPOINT_SECTIONS or type(sections.get('schema_version')) is not int or
+                        sections['schema_version'] != 1):
+                    raise ValueError('COMPLETE_EXISTING_RESULT_REQUIRED')
+                require_completed_publication(str(output), state, target)
+                from quantfusion.data.snapshot import verify_frozen_snapshot
+                verify_frozen_snapshot(output / 'snapshots' / target)
+                return 0, outcome
             previous = context.get('previous')
             if series.independent() and not previous:
                 raise ValueError('INHERITED_SEED_REQUIRED')
@@ -222,6 +328,10 @@ def run() -> tuple[int, str]:
                 if series.independent():
                     if state['scan_date'] != previous['date']:
                         raise ValueError('RESTORED_CLOSE_DATE_MISMATCH')
+                    sections = state.get('checkpoint', {}).get('state', {})
+                    if (validate_risk_state(state) is not None or set(sections) != CHECKPOINT_SECTIONS or
+                            type(sections.get('schema_version')) is not int or sections['schema_version'] != 1):
+                        raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
                     from quantfusion.data.snapshot import verify_frozen_snapshot
                     verify_frozen_snapshot(output / 'snapshots' / state['scan_date'])
             previous_profile = previous.get('profile', {}) if previous else {}
@@ -263,12 +373,22 @@ def run() -> tuple[int, str]:
             def after(ctx):
                 report['phase'] = 'RISK_INPUT_PREPARATION'
                 report['risk_input_evidence_dates'] = prepare_risk_inputs(ctx)
+                from quantfusion.data.sessions import index_coverage
+                final_indices = index_coverage(ctx.request.regime_data_dir, dates)
+                report['index_preparation']['final_refresh'] = ctx.index_refresh
+                report['index_preparation']['final_coverage'] = final_indices
+                report['resume_interval'] = require_resume_interval(ctx, calendar, previous['date'])
                 if not freeze_scan(ctx):
                     raise ValueError('NATIVE_SNAPSHOT_FAILED')
+                declared = {entry['path']: entry['sha256'] for entry in ctx.snapshot_manifest['evidence']}
+                if any(declared.get('regime_data/' + code + '.csv') != facts['sha256'] for code, facts in final_indices.items()):
+                    raise ValueError('FROZEN_INDEX_IDENTITY_MISMATCH')
 
             # Rebuild the complete evidence snapshot on each delayed-data retry.
             ctx = prepare_native_with_retry(build_context, load_prev_risk_state, log,
-                                            prepare_scan, probe_market, before=before, after=after)
+                                            prepare_scan, probe_market, before=before, after=after,
+                pending_session=(target, previous_date) if target == datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+                    and previous['date'] == previous_date else None)
             if series.independent():
                 from quantfusion.io.state_store import validate_checkpoint_identity
                 validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
@@ -328,15 +448,15 @@ def run() -> tuple[int, str]:
             else:
                 store.request('event', {'date': target, 'status': 'DELIVERY_FAILED' if finalized else 'PREPARATION_FAILED',
                     'details': {**ident, 'error': str(exc), 'phase': report.get('phase', 'PREPARATION'), 'log_tail': log_path.read_text()[-16000:]}})
-            return 1, 'PRIVATE_DAILY_TASK_FAILED'
+            return 1, 'PRIVATE_DAILY_TASK_FAILED:' + failure_reason(exc)
     return 0, 'VERIFIED_' + report['status']
 
 
 if __name__ == '__main__':
     try:
         status, outcome = run()
-    except Exception:
-        status, outcome = 1, 'PRIVATE_DAILY_TASK_FAILED'
+    except Exception as exc:
+        status, outcome = 1, 'PRIVATE_DAILY_TASK_FAILED:' + failure_reason(exc)
     # Never print reports, native diagnostics, tokens or private response bodies.
     print(outcome)
     raise SystemExit(status)

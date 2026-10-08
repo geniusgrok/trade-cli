@@ -87,6 +87,7 @@ def _read(path: str, files: dict[str, str]) -> dict | None:
 
 
 def _commit(path: str, value: dict, head: str, tree: str, files: dict[str, str]) -> None:
+    profile.require_writer()
     data = _seal(value, path)
     if len(data) > 12_000_000:
         raise ValueError('STATE_FILE_TOO_LARGE')
@@ -113,6 +114,8 @@ def _path(day: str) -> str:
 
 
 def request(route: str, payload: dict) -> dict:
+    if route in {'start', 'finish', 'event'}:
+        profile.require_writer()
     day = payload['date']
     path = _path(day)
     head, tree, files = _snapshot()
@@ -121,11 +124,22 @@ def request(route: str, payload: dict) -> dict:
     if route == 'result':
         return current or {}
     if route == 'context':
+        if profile.independent() and current:
+            # A saved day is verified and reused before any live preparation.
+            return {'existing': current, 'previous': None, 'comparison': None}
         earlier = sorted(p for p in files if re.fullmatch(r'runs/\d{4}-\d{2}-\d{2}\.json\.enc', p) and p < path)
+        if profile.independent():
+            if any(p > path for p in files if re.fullmatch(r'runs/\d{4}-\d{2}-\d{2}\.json\.enc', p)):
+                raise ValueError('OUT_OF_ORDER_DATE')
+            earlier = earlier[-1:]
         previous = None
         for candidate in reversed(earlier):
             record = _read(candidate, files)
             profile.require_record(record)
+            if profile.independent() and record['status'] not in ('SUCCESS', 'DEGRADED'):
+                raise ValueError('PREVIOUS_RUN_UNRESOLVED')
+            if profile.independent() and record.get('risk_state') is None:
+                raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
             if record['status'] in ('SUCCESS', 'DEGRADED') and record.get('risk_state') is not None:
                 if profile.independent() and record['risk_state'].get('schema_version') != 2:
                     raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
