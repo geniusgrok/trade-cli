@@ -8,14 +8,16 @@ import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import private_store as store
+import runtime_profile as profile
 
 
 def main() -> int:
     root = Path(os.environ['RUNNER_TEMP'])
-    source, runtime = root / 'trade-source', root / 'trade-runtime'
+    source, runtime = profile.source_path(), root / 'trade-runtime'
     logs = runtime / 'logs'; logs.mkdir(parents=True, exist_ok=True)
     token = os.environ.get('TRADE_READ_TOKEN', '')
-    if not token:
+    prefetched = profile.independent() and bool(os.environ.get('TRADE_PREFETCHED_SOURCE'))
+    if not token and not prefetched:
         # Inspect only a boolean supplied by Actions, never a variable's value.
         variable_only = os.environ.get('SOURCE_TOKEN_VARIABLE_PRESENT', '').lower() == 'true'
         reason = 'SOURCE_TOKEN_IS_VARIABLE_NOT_SECRET' if variable_only else 'SOURCE_READ_SECRET_MISSING'
@@ -40,11 +42,20 @@ def main() -> int:
     phase = 'SOURCE_CLONE'
     with (logs / 'setup.log').open('wb') as log:
         try:
-            subprocess.run(['git', 'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch=main', 'https://github.com/geniusgrok/trade.git', str(source)], env=env, stdout=log, stderr=log, check=True, timeout=180)
-            phase = 'SOURCE_SPARSE_CHECKOUT'
-            subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '/quantfusion/', '/data/trading_calendar.json', '/requirements*.txt', '/pyproject.toml', '/AGENTS.md', '/README.md'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
-            phase = 'SOURCE_CHECKOUT'
-            subprocess.run(['git', 'checkout', 'main'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+            if not prefetched:
+                subprocess.run(['git', 'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch=main', 'https://github.com/geniusgrok/trade.git', str(source)], env=env, stdout=log, stderr=log, check=True, timeout=180)
+                phase = 'SOURCE_SPARSE_CHECKOUT'
+                subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '/quantfusion/', '/data/trading_calendar.json', '/requirements*.txt', '/pyproject.toml', '/AGENTS.md', '/README.md'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+                phase = 'SOURCE_CHECKOUT'
+                if profile.independent():
+                    subprocess.run(['git', 'fetch', '--depth=1', 'origin', profile.SOURCE_SHA], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+                    subprocess.run(['git', 'checkout', '--detach', profile.SOURCE_SHA], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+                else:
+                    subprocess.run(['git', 'checkout', 'main'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+            if profile.independent():
+                profile.require_source(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, env=env, stderr=log, text=True).strip())
+                if subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=source, env=env, stderr=log, text=True).strip():
+                    raise ValueError('INDEPENDENT_SOURCE_MODIFIED')
             phase = 'LOCK_VALIDATION'
             lock = source / 'requirements-lock.txt'
             if not lock.is_file():
@@ -57,7 +68,8 @@ def main() -> int:
             reason = 'TIMEOUT' if isinstance(error, subprocess.TimeoutExpired) else 'OPERATION_FAILED'
             try:
                 tail = (logs / 'setup.log').read_text(errors='replace')[-16000:]
-                tail = tail.replace(token, '[REDACTED]').replace(env['GIT_CONFIG_VALUE_0'], '[REDACTED]')
+                if token:
+                    tail = tail.replace(token, '[REDACTED]').replace(env['GIT_CONFIG_VALUE_0'], '[REDACTED]')
                 if phase == 'SOURCE_CLONE':
                     lower_tail = tail.lower()
                     if 'repository not found' in lower_tail:

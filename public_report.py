@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import re
 from typing import Any
+import runtime_profile as series
 
 MISSING = '未提供'
 STATUS = {'SUCCESS': '成功', 'DEGRADED': '降级', 'FAILED': '失败'}
@@ -184,12 +185,40 @@ def markdown(report: dict) -> str:
     data_date = report.get('data_date')
     if data_date is not None:
         checked_date(data_date)
+    simulation = report.get('simulation_identity', '')
+    if simulation not in ('', 'a92-inherited-v1'):
+        raise ValueError('UNKNOWN_SIMULATION_IDENTITY')
+    execution = '执行口径：生产固定起点模拟，仅作策略观察，不代表真实账户持仓或成交。'
+    if simulation:
+        close = checked_date(report['continuation']['previous_close'])
+        mode = report['continuation']['mode']
+        if mode not in ('native_full_checkpoint_resume', 'native_full_checkpoint_seed'):
+            raise ValueError('INDEPENDENT_CONTINUATION_REQUIRED')
+        series.require_origin(report.get('state_origin'))
+        execution = (f'独立纸面系列：`{simulation}`；从 {close} 完整收盘状态原生续跑，不代表真实账户持仓或成交。'
+                     if mode == 'native_full_checkpoint_resume' else
+                     f'独立纸面系列：`{simulation}`；{close} 基线由旧生产者经济历程事后重建，a92 仅恢复完整状态并出版，未回放基线期。')
     out = ['# Trade Core17 盘后日报', '',
            f'目标交易日：{target}；行情截止日：{data_date or MISSING}。',
            f'策略结果状态：**{STATUS[status]}（{status}）**。',
            f'实际生产源码版本：`{sha}`。',
            f'[查看本次计算的运行记录](https://github.com/geniusgrok/trade-cli/actions/runs/{run_id})。',
-           '执行口径：生产固定起点模拟，仅作策略观察，不代表真实账户持仓或成交。', '', '## 重点变化', '']
+           execution, '', '## 重点变化', '']
+    if simulation:
+        origin = report['state_origin']
+        out.extend(['状态来源：`after_fact_reconstruction`；基线收盘：' + origin['baseline_close'] + '。',
+                    '基线经济生产者：`' + origin['old_source'] + '`；切换生产者：`' + origin['cutover_source'] + '`。',
+                    '普通期准入变化：`' + origin['admission_change'] + '`。'])
+        for name in ('capture_sha256', 'original_record_sha256', 'original_bundle_sha256', 'adaptation_proof_sha256'):
+            out.append(f'来源证据 {name}：`{origin[name]}`。')
+        if report.get('input_evidence') is not None:
+            import seed_contract
+            evidence = report['input_evidence']
+            seed_contract.require_evidence_provenance(evidence)
+            out.append('行情证据来源：`' + evidence['kind'] + '`；原保存包：`' + evidence['original_bundle_sha256'] + '`。')
+            if evidence['kind'] == 'provider_full_history_recovery':
+                out.append('后来从同市场取得完整历史序列；恢复收据：`' + evidence['recovery_receipt_sha256'] + '`。原运行与旧序列保留。')
+        out.append('')
     comparison = report.get('comparison') or {}
     comparable = comparison.get('status') in {'有变化', '无变化'}
     out.append(f'比较日期：{previous or MISSING} → {target}。')

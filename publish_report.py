@@ -18,6 +18,7 @@ import urllib.request
 from zoneinfo import ZoneInfo
 
 from public_report import checked_date, markdown, safe_document
+import runtime_profile as profile
 
 REPOSITORY = 'geniusgrok/trade-cli'
 API = f'https://api.github.com/repos/{REPOSITORY}'
@@ -85,7 +86,7 @@ def publish(target: str, text: str) -> dict:
     data = text.encode('utf-8')
     if len(data) > 500_000:
         raise ValueError('PUBLIC_REPORT_TOO_LARGE')
-    path = f'reports/{target}.md'
+    path = profile.report_path(target)
     existing = read_file(path, 'main')
     if existing is not None:
         if existing != data:
@@ -106,6 +107,7 @@ def publish(target: str, text: str) -> dict:
 
 
 def verified_report(saved: dict, target: str, bundle: bytes) -> dict:
+    profile.require_record(saved)
     report = saved['report']
     if (report['target_date'] != target or report['status'] != saved['status'] or
             str(report['actions_run_id']) != saved['run_id'] or len(bundle) != saved['bytes'] or
@@ -127,7 +129,7 @@ def verified_report(saved: dict, target: str, bundle: bytes) -> dict:
 
 def main() -> None:
     import private_store as store
-    source = Path(os.environ['RUNNER_TEMP']) / 'trade-source'
+    source = profile.source_path()
     sys.path.insert(0, str(source))
     from quantfusion.data.sessions import load_calendar
     from runner import resolve_target
