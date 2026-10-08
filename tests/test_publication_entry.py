@@ -1,5 +1,6 @@
 """公开发布使用仓库回读凭据，不扩展原件服务接口。"""
 import json
+from pathlib import Path
 import sys
 import types
 import unittest
@@ -11,6 +12,11 @@ from test_publication import fixture
 
 
 class PublicationEntryTests(unittest.TestCase):
+    def test_daily_production_requires_the_repository_main_branch(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text()
+        # A branch manual run must be stopped before reading or publishing state.
+        self.assertIn("  daily:\n    if: github.repository == 'geniusgrok/trade-cli' && github.ref == 'refs/heads/main'\n", workflow)
+
     def test_ready_day_without_finished_result_fails_instead_of_reporting_success(self):
         store = types.ModuleType('private_store')
         store.request = Mock(return_value={'status': 'RUNNING'})
