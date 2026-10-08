@@ -16,15 +16,16 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import private_store as store
+from checkpoint_transfer import import_public_key
 
 COMMIT = '9cbb3d2a7648715422ff41739de621e9d4c12b5f'
-OID = '6861c312e010b755f244ecab804bffaa3ce31a7f'
-CIPHER_SHA = 'd012b6ed01564f74145c0ced2129aad4e4efac980e5483be3c95518dcff0eb99'
-CIPHER_BYTES = 620006
+OID = 'e2dd07957228ce7847e938126ec63f2b4d6dc1a5'
+CIPHER_SHA = '06d13248ba9bd406e3957065089c8e357fd47f810ab55cc2d1e7f5b0621df489'
+CIPHER_BYTES = 628324
 RECIPIENT_SHA = '668be6f304597fb7cf8e9ab3ca79da3b340db5273d6e10e8caa91f9c0c8ae284'
-RECORD = 'runs/2026-09-30.json.enc'
-SOURCE = 'd2fee61a7f91679f6fdabaf97ba68cd030ad290a'
-BUNDLE_SHA = 'e9aa0cd6da700515f19e4e71d9e19ef645b8447ab692fe30ea6fc9115d0e8b0f'
+RECORD = 'runs/2026-10-08.json.enc'
+SOURCE = 'a92d79dad4fc21d38aab26a36f31f58a34b2dd62'
+BUNDLE_SHA = 'e72529cd310c61393f7016d6ce400e7349ec50ae0a32ffb2887e130dd33e1050'
 AAD = ('trade-checkpoint-evidence-v1|' + OID + '|' + RECORD).encode()
 
 
@@ -51,9 +52,9 @@ def read_evidence():
     value = store._open(ciphertext, RECORD)
     # Preserve the exact authenticated old serialized record, not a reserialization.
     raw = AESGCM(store._key()).decrypt(ciphertext[3:15], ciphertext[15:], RECORD.encode())
-    if json.loads(raw) != value or value['run_id'] != '36724655406':
+    if json.loads(raw) != value or value['run_id'] != '37756101993':
         raise ValueError('OLD_RUN_IDENTITY')
-    if value['report']['strategy_sha'] != SOURCE or value['report']['target_date'] != '2026-09-30':
+    if value['report']['strategy_sha'] != SOURCE or value['report']['target_date'] != '2026-10-08':
         raise ValueError('OLD_PRODUCER_IDENTITY')
     bundle = store.decode_bundle(value['bundle'], BUNDLE_SHA)
     if value['sha256'] != BUNDLE_SHA or value['bytes'] != len(bundle):
@@ -71,21 +72,21 @@ def read_evidence():
                 raise ValueError('OLD_MEMBER_LENGTH')
             members[m.name] = data
             public_path = (m.name in {'output/risk_state.json','output/latest_success.json','output/daily_report.json',
-                'output/daily_report.md','output/signals_2026-09-30.json','logs/production.log'}
+                'output/daily_report.md','output/signals_2026-10-08.json','logs/production.log'}
                 or re.fullmatch(r'(cache|regime)/[0-9]{6}\.csv', m.name)
-                or re.fullmatch(r'output/snapshots/2026-09-30/(manifest\.(json|sha256)|(market_data|regime_data)/[0-9]{6}\.csv)', m.name))
+                or re.fullmatch(r'output/snapshots/2026-10-08/(manifest\.(json|sha256)|(market_data|regime_data)/[0-9]{6}\.csv)', m.name))
             inventory.append({('path' if public_path else 'private_path_sha256'):
                 m.name if public_path else hashlib.sha256(m.name.encode()).hexdigest(),
                 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
     risk = json.loads(members['output/risk_state.json'])
     if risk != value['risk_state'] or json.loads(members['output/daily_report.json']) != value['report']:
         raise ValueError('OLD_REPORT_STATE_BINDING')
-    manifest_path = 'output/snapshots/2026-09-30/manifest.json'
+    manifest_path = 'output/snapshots/2026-10-08/manifest.json'
     manifest_raw = members[manifest_path]
     manifest = json.loads(manifest_raw)
-    prefix = 'output/snapshots/2026-09-30/'
+    prefix = 'output/snapshots/2026-10-08/'
     manifest_sha = hashlib.sha256(manifest_raw).hexdigest()
-    if (manifest['end_date'] != '2026-09-30'
+    if (manifest['end_date'] != '2026-10-08'
             or members[prefix + 'manifest.sha256'].decode().strip() != manifest_sha):
         raise ValueError('OLD_MANIFEST_IDENTITY')
     symbols = manifest['symbols']
@@ -103,14 +104,14 @@ def read_evidence():
     actual = {name[len(prefix):] for name in members if name.startswith(prefix)}
     if declared != required or actual != declared | {'manifest.json','manifest.sha256'}:
         raise ValueError('OLD_SNAPSHOT_FILE_SET')
-    native = json.loads(members['output/signals_2026-09-30.json'])
+    native = json.loads(members['output/signals_2026-10-08.json'])
     if (manifest.get('deployment_policy') != 'production_daily_replay'
-            or native['scan_date'] != '2026-09-30' or risk['scan_date'] != native['scan_date']
-            or risk['run_id'] != native['run_id'] or not native['risk_state_saved']
+            or native['scan_date'] != '2026-10-08' or risk['scan_date'] != '2026-09-30'
+            or native['risk_state_saved'] or not native['summary']['risk_state_identity_mismatch']
             or native['deployment']['snapshot_manifest_sha256'] != manifest_sha):
         raise ValueError('OLD_NATIVE_RECORD_BINDING')
     after = store._snapshot()[0]
-    metadata = {'evidence_scope': 'authenticated original old record; no replay or state writes',
+    metadata = {'evidence_scope': 'authenticated original current-input record; no replay or state writes',
         'state_before': before, 'state_after': after, 'pinned_state_commit': COMMIT,
         'record_path': RECORD, 'ciphertext_oid': OID, 'ciphertext_sha256': hashlib.sha256(ciphertext).hexdigest(),
         'original_plaintext_bytes': len(raw), 'original_plaintext_sha256': hashlib.sha256(raw).hexdigest(),
@@ -134,6 +135,9 @@ def read_evidence():
     sealed = b'TCP1' + struct.pack('>H', len(wrapped)) + wrapped + nonce + AESGCM(key).encrypt(nonce, raw, AAD)
     encoded = base64.b64encode(sealed).decode()
     chunks = [encoded[i:i+12000] for i in range(0, len(encoded), 12000)]
+    metadata['approved_seed_import'] = {'identity': 'a92-inherited-v1', 'source': SOURCE,
+        'public_key': import_public_key(store._key()), 'protocol': 'TAI1 X25519 HKDF-SHA256 AES-256-GCM',
+        'source_authentication': 'Requires separately reviewed trusted seed cipher and payload SHA; public-key encryption alone is not authentication'}
     metadata['transport'] = {'format': 'TCP1 RSA-OAEP-SHA256 + AES-256-GCM', 'sealed_bytes': len(sealed),
         'sealed_sha256': hashlib.sha256(sealed).hexdigest(), 'chunks': len(chunks),
         'recipient_public_key_sha256': hashlib.sha256(Path('evidence_recipient.pub').read_bytes()).hexdigest()}

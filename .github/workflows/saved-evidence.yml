@@ -1,11 +1,11 @@
-name: Isolated old checkpoint evidence
+name: Isolated original current input evidence
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   evidence:
-    if: github.repository == 'geniusgrok/trade-cli' && github.ref == 'refs/heads/codex/trade-checkpoint-evidence-20261008'
+    if: github.repository == 'geniusgrok/trade-cli' && github.ref == 'refs/heads/codex/trade-current-input-evidence-20261008'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
