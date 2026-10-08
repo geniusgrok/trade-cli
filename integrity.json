@@ -15,9 +15,9 @@
     "sha256": "3d6d33d9ef0bad31a2b422e81450db9c7af86c5bc393bf594523f5a224f1fb67"
   },
   ".github/workflows/trade-inherited.yml": {
-    "bytes": 2492,
-    "git_blob": "3d2bac1405b8b6a27992d9e03f693d4e50c99554",
-    "sha256": "bfc50bdec2697704245c79edf215ed5cad4aebbc2a34e2c66ebeeec64dd20262"
+    "bytes": 2513,
+    "git_blob": "f6c6e504eaef6cd45f95825ccfa170f6c0f74ec0",
+    "sha256": "4058f84afc22ef26c0e2e8dbc9773436a358c5072da3210ec778e19275567245"
   },
   ".gitignore": {
     "bytes": 53,
@@ -110,9 +110,9 @@
     "sha256": "d6acd22d567e73ad28504e73b8b1152972725f751cf760075eac07517ee32e28"
   },
   "tests/test_independent_series.py": {
-    "bytes": 9784,
-    "git_blob": "3417961d590f8a64fb5cd99a64d038a126f38428",
-    "sha256": "0392a108854dfa197ddfbc5e5c06609c9e11a3ed25d934f43b30ff0735249575"
+    "bytes": 10425,
+    "git_blob": "4ce0b9381dd88a6960921e0d6939becb6f06ed29",
+    "sha256": "6782c937b486bef42f75d675a15d6e8c832ceca1c4a24b8686df71d7586ef0d5"
   },
   "tests/test_index_preparation.py": {
     "bytes": 2608,

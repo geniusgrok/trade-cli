@@ -26,8 +26,6 @@ jobs:
       PYTHONUNBUFFERED: '1'
       TRADE_SIMULATION_IDENTITY: a92-inherited-v1
       TARGET_DATE: ${{ inputs.target_date }}
-      TRADE_LOCAL_MARKET_DIR: ${{ runner.temp }}/trade-inherited-evidence/market_data
-      TRADE_LOCAL_REGIME_DIR: ${{ runner.temp }}/trade-inherited-evidence/regime_data
       REPORT_PUBLISH_TOKEN: ${{ github.token }}
       STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}
     steps:
@@ -60,6 +58,9 @@ jobs:
       - name: 核验独立状态分支和加密密钥
         run: python preflight.py
       - name: 原生续跑并核验完整原件保存
+        env:
+          TRADE_LOCAL_MARKET_DIR: ${{ runner.temp }}/trade-inherited-evidence/market_data
+          TRADE_LOCAL_REGIME_DIR: ${{ runner.temp }}/trade-inherited-evidence/regime_data
         run: python runner.py
       - name: 发布独立中文日报并回读核验
         if: ${{ !cancelled() && steps.source.conclusion == 'success' && steps.seed.conclusion == 'success' }}
