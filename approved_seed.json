@@ -1,0 +1,44 @@
+{
+  "baseline_close": "2026-09-30",
+  "cipher_file": "approved_seed.enc",
+  "cipher_sha256": "85474383df7e75911c68c1898cddebe3390b15eab27f70cd2a9539a6e8a97dc0",
+  "cutover_source": "a92d79dad4fc21d38aab26a36f31f58a34b2dd62",
+  "evidence_bundle_sha256": "9bb7712f9b82abde55e0a64220a815f8a2379cdd093ca0ca33dc6826a4b9e6ff",
+  "evidence_date": "2026-10-08",
+  "evidence_provenance": {
+    "kind": "provider_full_history_recovery",
+    "original_bundle_sha256": "e72529cd310c61393f7016d6ce400e7349ec50ae0a32ffb2887e130dd33e1050",
+    "recovery_receipt_sha256": "51ac295e3e29a5aee80638152b4caff840aab87e45103ecad55554f0c6afd794"
+  },
+  "evidence_snapshot_manifest_sha256": "463bf89ba1a3e93f85a69b6562f2073ebb3e88e1428e6c7b7cbf1aabd71035b5",
+  "git_blob_oid": "a8221f6bbf9c62b0c15677dc5434fcde3f87cdb9",
+  "identity": "a92-inherited-v1",
+  "native_identity": {
+    "calendar_sha256": "9177f84dd29811a0f4a56c922b4482fc41b5e999c654bacb6862515bdfe9e34e",
+    "requirements_lock_sha256": "c81024bd3457e3034fa4ee34fa6e1bdc9382c5cded119acacf4917413177f44e",
+    "runtime": {
+      "numpy": "2.5.1",
+      "pandas": "3.0.5",
+      "python": "3.12.14"
+    },
+    "source_sha256": "8dd54caf07e284cf64a3e2091a5c300439fa1958a87896973cf7e660d88bc3be"
+  },
+  "old_source": "d2fee61a7f91679f6fdabaf97ba68cd030ad290a",
+  "plaintext_sha256": "db3657f80bcf344aa09af57123c2e3527d0c654d71eceb1dad1756b64f8efe0c",
+  "schema_version": 1,
+  "seed_artifact_sha256": "14ffa26219b8ed371d217ba47f54f8c4f87969adac6a79b3d26cf6e00aafb1b2",
+  "seed_bundle_sha256": "a1c80a9ae5caf987df2f1fc5028e526e2ee4b13a9d7318bdd5034799f1087607",
+  "seed_snapshot_manifest_sha256": "77d2f23dc43d0fae2bece8a99821aabe37f9d6593d247f1b5088bb4b02fc1482",
+  "seed_state_sha256": "67a61739a04d1c89a2fb613c414aca912425d2f70b9222047cdd85f122f26bc8",
+  "state_origin": {
+    "adaptation_proof_sha256": "004970145c58e8b8f077f5bff28eebf7976c74fad7a4b7370494814fc2cbac31",
+    "admission_change": "none_to_ordinary_systemic_admission",
+    "baseline_close": "2026-09-30",
+    "capture_sha256": "d00707c2cc4f6ac17990bfde1c878cbb4523b77d9d7d1c544016837173706861",
+    "cutover_source": "a92d79dad4fc21d38aab26a36f31f58a34b2dd62",
+    "kind": "after_fact_reconstruction",
+    "old_source": "d2fee61a7f91679f6fdabaf97ba68cd030ad290a",
+    "original_bundle_sha256": "e9aa0cd6da700515f19e4e71d9e19ef645b8447ab692fe30ea6fc9115d0e8b0f",
+    "original_record_sha256": "6c948b8273fa8a8d9155ccf350ab8fbd96e02c9c83bf19384e1e1d2ab72c97ac"
+  }
+}
