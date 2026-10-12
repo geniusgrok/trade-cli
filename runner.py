@@ -2,6 +2,8 @@
 from __future__ import annotations
 import bisect
 import contextlib
+import csv
+from decimal import Decimal, InvalidOperation
 from datetime import date, datetime, time, timedelta
 import importlib.metadata
 import json
@@ -231,6 +233,43 @@ def failure_reason(exc: Exception) -> str:
     return code if code in allowed else 'PRODUCTION_VALIDATION_FAILED'
 
 
+def checkpoint_drift_summary(previous: Path, current: Path, checkpoint: dict) -> list[dict]:
+    """Report market-input differences only; never expose account state or logs."""
+    from quantfusion.io.state_store import checkpoint_prefix_hashes
+    close = checkpoint['state']['last_completed_close']
+    expected = checkpoint['prefix_hashes']
+    if checkpoint_prefix_hashes(previous, close) != expected:
+        raise ValueError('RESTORED_STATE_MISMATCH')
+    observed = checkpoint_prefix_hashes(current, close)
+    differences = []
+    for name in sorted(set(expected) | set(observed)):
+        if expected.get(name) == observed.get(name):
+            continue
+        if re.fullmatch(r'(market_data|regime_data)/[0-9]{6}\.csv', name) is None:
+            raise ValueError('UNSAFE_BUNDLE')
+        def rows(root):
+            with (root / name).open(newline='') as handle:
+                return {row['date'][:10]: row for row in csv.DictReader(handle) if row['date'][:10] <= close}
+        old, new = rows(previous), rows(current)
+        columns, changed_dates, maximum = set(), set(), Decimal(0)
+        for day in old.keys() & new.keys():
+            for column in set(old[day]) | set(new[day]):
+                left, right = old[day].get(column), new[day].get(column)
+                if left == right:
+                    continue
+                columns.add(column)
+                changed_dates.add(day)
+                try:
+                    maximum = max(maximum, abs(Decimal(left) - Decimal(right)))
+                except (InvalidOperation, TypeError):
+                    pass
+        differences.append({'input': name, 'missing_rows': len(old.keys() - new.keys()),
+            'added_rows': len(new.keys() - old.keys()), 'changed_rows': len(changed_dates),
+            'columns': sorted(columns), 'first_changed': min(changed_dates) if changed_dates else None,
+            'last_changed': max(changed_dates) if changed_dates else None, 'max_absolute_delta': str(maximum)})
+    return differences
+
+
 def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dict:
     target = ctx.request.end_date
     if native.get('status') != 'ok' or native.get('mode') != 'simulation' or native.get('scan_date') != target or native.get('run_id') != ctx.run_id:
@@ -391,7 +430,14 @@ def run() -> tuple[int, str]:
                     and previous['date'] == previous_date else None)
             if series.independent():
                 from quantfusion.io.state_store import validate_checkpoint_identity
-                validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
+                try:
+                    validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
+                except ValueError as exc:
+                    if failure_reason(exc) == 'CHECKPOINT_HISTORY_CHANGED':
+                        drift = checkpoint_drift_summary(output / 'snapshots' / previous['date'],
+                            ctx.snapshot_dir, ctx.prev_risk['checkpoint'])
+                        print('CHECKPOINT_INPUT_DRIFT:' + json.dumps(drift, sort_keys=True), file=sys.__stdout__, flush=True)
+                    raise
             receipt = store.request('start', {'date': target, 'strategy_sha': ident['strategy_sha'],
                                              'previous_date': previous['date'] if previous else None})
             if not receipt.get('started'):
