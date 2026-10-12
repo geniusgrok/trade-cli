@@ -244,7 +244,7 @@ def pack(root: Path) -> bytes:
         with tarfile.open(fileobj=gz, mode='w') as archive:
             for path in sorted(root.rglob('*')):
                 relative = path.relative_to(root)
-                if relative.parts[0] not in {'cache', 'regime', 'output', 'logs'}:
+                if relative.parts[0] not in {'cache', 'regime', 'output', 'logs', 'input_basis'}:
                     continue
                 if path.is_symlink():
                     raise ValueError('RUNTIME_SYMLINK')

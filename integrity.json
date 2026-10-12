@@ -10,9 +10,9 @@
     "sha256": "9cc21f2f5cb7668e899aeb3b49fe57a8db239d7fc381844679ac1d561f7921c6"
   },
   ".github/workflows/trade-daily.yml": {
-    "bytes": 2290,
-    "git_blob": "6dcfda24b6aebbe360e796bddd6d97ee9298e287",
-    "sha256": "58f89056d421e9df94fafa072ef4528d173e9d53df137bce7303dcebd535b895"
+    "bytes": 2425,
+    "git_blob": "6717d09c67517a70484df300da326578e6d88fff",
+    "sha256": "adbe0bc01668de0d8b328b9a71d62c18b84fc1e4d5d49ae0312b1f1fd7e19f51"
   },
   ".github/workflows/trade-inherited.yml": {
     "bytes": 1917,
@@ -25,9 +25,9 @@
     "sha256": "25458055814c6879f590d21a27a5a29e34fddbb5a0eecce2dab53b110525ed20"
   },
   "README.md": {
-    "bytes": 7760,
-    "git_blob": "61624ee8d89a1fdb3851b3f9636fed120e1ea2ac",
-    "sha256": "af717f2041e51d2350d4e3f85a35c76abe1e9aa020d3e01ad9081bd211961a62"
+    "bytes": 8346,
+    "git_blob": "1a5f6de3fd60caefd3ef2eb4261ea1aa4f5a7518",
+    "sha256": "acb81b88924ec0f016b2d5bdbd2f894852f1386b625554752c5af7eb117ad00b"
   },
   "approved_seed.enc": {
     "bytes": 645120,
@@ -49,6 +49,11 @@
     "git_blob": "b04aa30a53c1cb6c85ae282079f6476cbf0ca8d6",
     "sha256": "e5d436ac9fb9112ec7a47866dd103def85edc6144d046e2764b4228887ffc674"
   },
+  "continuous_inputs.py": {
+    "bytes": 4734,
+    "git_blob": "5d6d94a1b2c30fce80b000d8c8a4bf47557ce055",
+    "sha256": "95832eb3d8c48c37b6b8d6b08b58d5dce8c330c94a281a22da780aebb2ad5384"
+  },
   "diagnose_saved.py": {
     "bytes": 9471,
     "git_blob": "db9d7af3d3322a6f1404954611f1bb673f091abf",
@@ -60,9 +65,9 @@
     "sha256": "8c6f3780d9ff8d8e3635c5d432b47585b5ae07b1226f55c30a5c06fcd152e5dd"
   },
   "private_store.py": {
-    "bytes": 17493,
-    "git_blob": "ecdb0c1bc92e324f180b0e739dbb5bccf1f80745",
-    "sha256": "77e4a1c511c6c13b45b457137c77180e4c4b4ca006772cdeeebf2d7024e099bc"
+    "bytes": 17508,
+    "git_blob": "235999af970ba56bbac50d3c72213e4aa01da4a6",
+    "sha256": "a5de027205c4d75aaa339b180d4c76e3efb54ae8b685131ad76bbba288118bae"
   },
   "public_report.py": {
     "bytes": 15152,
@@ -80,9 +85,9 @@
     "sha256": "63d96ce0eaca5e394abe045f40d700f8b9e0bba821bf7c009296e9bf8a30397c"
   },
   "runner.py": {
-    "bytes": 30213,
-    "git_blob": "e466b73ab7489f03626fc708d32325ea042c4515",
-    "sha256": "b103ebace257db6be2e2a88781fba3dea219d16a04bad3e0a6b9a199a4c8f700"
+    "bytes": 30599,
+    "git_blob": "317f4b911cfbe763322fc7c1b7bf39680dc41f1e",
+    "sha256": "c578262dbffbadd0e9c446809fa2dc751aa515778ee96cde302ca9fa355b4742"
   },
   "runtime_profile.py": {
     "bytes": 2482,
@@ -108,6 +113,11 @@
     "bytes": 1684,
     "git_blob": "d9c80bbe4caf7dcb4deee16b586ae95079f9e8ab",
     "sha256": "d6acd22d567e73ad28504e73b8b1152972725f751cf760075eac07517ee32e28"
+  },
+  "tests/test_continuous_inputs.py": {
+    "bytes": 3016,
+    "git_blob": "10eefb2daf646cc6bc549918422887334c6c6ac8",
+    "sha256": "b427aa36dd00f8b0c85aea04fb9c7b139420ded5fabaa1ebe944f293a797d370"
   },
   "tests/test_daily_resume.py": {
     "bytes": 26432,

@@ -230,6 +230,7 @@ def failure_reason(exc: Exception) -> str:
         'CURRENT_BAR_UNAVAILABLE', 'NATIVE_PREPARATION_FAILED', 'RESUME_INTERVAL_INVALID', 'RESUME_FRAME_INVENTORY',
         'RESUME_UNEXPECTED_EVIDENCE_DATE', 'RESUME_PRE_LISTING_CONFLICT', 'RESUME_HISTORY_GAP',
         'RESUME_ECONOMIC_SESSION_MISSING', 'FROZEN_INDEX_IDENTITY_MISMATCH', 'BUNDLE_INTEGRITY', 'UNSAFE_BUNDLE'}
+    allowed.add('CHECKPOINT_HISTORY_CHANGED')
     return code if code in allowed else 'PRODUCTION_VALIDATION_FAILED'
 
 
@@ -412,6 +413,8 @@ def run() -> tuple[int, str]:
             def after(ctx):
                 report['phase'] = 'RISK_INPUT_PREPARATION'
                 report['risk_input_evidence_dates'] = prepare_risk_inputs(ctx)
+                from continuous_inputs import prepare_continuous_inputs
+                report['input_basis'] = prepare_continuous_inputs(ctx, output / 'snapshots' / previous['date'])
                 from quantfusion.data.sessions import index_coverage
                 final_indices = index_coverage(ctx.request.regime_data_dir, dates)
                 report['index_preparation']['final_refresh'] = ctx.index_refresh
@@ -459,6 +462,8 @@ def run() -> tuple[int, str]:
                 if code in symbols:
                     close = next((frame.iloc[-1][key] for key in ('close', 'Close') if key in frame.columns), None)
                     quotes[code] = {'date': str(frame.index[-1].date()), 'close': float(close) if close is not None else None}
+                    if code in report.get('input_basis', {}):
+                        quotes[code]['close'] = report['input_basis'][code]['upstream_close']
             flags = native.get('summary', {})
             degraded = validation['warmup_status'] == 'DEGRADED' or not native.get('risk_state_saved') or flags.get('risk_state_identity_mismatch') or flags.get('current_route_mismatch')
             report.update(status='DEGRADED' if degraded else 'SUCCESS', data_date=target,
