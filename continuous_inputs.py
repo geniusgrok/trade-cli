@@ -64,6 +64,7 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
     """Verify the old snapshot and normalize complete frames before freezing."""
     import pandas as pd
     from quantfusion.io.state_store import checkpoint_prefix_hashes
+    from quantfusion.data import providers
     from quantfusion.data.providers import _normalize_columns
 
     checkpoint = ctx.prev_risk['checkpoint']
@@ -83,18 +84,34 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
         try:
             adjusted, facts = match_price_basis(frame, committed, close, expected[name])
         except ValueError:
-            before, after = committed.loc[:close], frame.loc[:close]
-            common = before.index.intersection(after.index)
-            samples = list(common[:2]) + list(common[-2:])
-            details = {'symbol': code, 'provider': frame.attrs.get('volume_provider', 'unknown'),
-                'volume_dtype': [str(before['volume'].dtype), str(after['volume'].dtype)],
-                'volume_equal': before['volume'].equals(after['volume']),
-                'price_decimals': max(-Decimal(str(v)).normalize().as_tuple().exponent
-                    for v in before[['open', 'close', 'high', 'low']].to_numpy().ravel()),
-                'samples': [{'date': str(day.date()), 'committed': float(before.loc[day, 'close']),
-                            'upstream': float(after.loc[day, 'close'])} for day in samples]}
-            print('PRICE_BASIS_REJECTED:' + json.dumps(details, sort_keys=True), file=sys.__stdout__, flush=True)
-            raise
+            # Rounded qfq feeds can lose the precision needed to reconstruct
+            # the old basis. Try other native complete-history providers once;
+            # the exact same hash contract applies to every candidate.
+            candidates = [('Eastmoney', providers._fetch_eastmoney), ('Sina', providers._fetch_sina),
+                          ('Tencent', providers._fetch_tencent)]
+            start = (pd.Timestamp(ctx.request.start_date) - pd.Timedelta(
+                days=max(400, getattr(ctx.request, 'warmup_days', 365)))).strftime('%Y-%m-%d')
+            selected = None
+            for provider, fetch in candidates:
+                if provider == frame.attrs.get('volume_provider'):
+                    continue
+                try:
+                    candidate = fetch(code, start, ctx.request.end_date)
+                    candidate = providers._normalize_provider_volume(candidate, provider, symbol=code)
+                    candidate = _normalize_columns(candidate).loc[str(committed.index[0].date()):ctx.request.end_date]
+                    if candidate.empty or candidate.index[-1] != frame.index[-1]:
+                        continue
+                    adjusted, facts = match_price_basis(candidate, committed, close, expected[name])
+                    facts['provider'] = provider
+                    selected = candidate
+                    break
+                except Exception:
+                    continue
+            if selected is not None:
+                frame = selected
+            else:
+                basis_rejected(code, frame, committed, close)
+                raise ValueError('CHECKPOINT_HISTORY_CHANGED') from None
         # Retain the complete upstream history and the conversion receipt.
         raw.mkdir(parents=True, exist_ok=True)
         path = raw / f'{code}.csv'
@@ -108,3 +125,18 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
         replacements[code] = adjusted
     ctx.snapshot_frames.update(replacements)
     return proof
+
+
+def basis_rejected(code, frame, committed, close):
+    """Emit bounded public-market facts only when no complete feed is compatible."""
+    before, after = committed.loc[:close], frame.loc[:close]
+    common = before.index.intersection(after.index)
+    samples = list(common[:2]) + list(common[-2:])
+    details = {'symbol': code, 'provider': frame.attrs.get('volume_provider', 'unknown'),
+        'volume_dtype': [str(before['volume'].dtype), str(after['volume'].dtype)],
+        'volume_equal': before['volume'].equals(after['volume']),
+        'price_decimals': max(-Decimal(str(v)).normalize().as_tuple().exponent
+            for v in before[['open', 'close', 'high', 'low']].to_numpy().ravel()),
+        'samples': [{'date': str(day.date()), 'committed': float(before.loc[day, 'close']),
+                    'upstream': float(after.loc[day, 'close'])} for day in samples]}
+    print('PRICE_BASIS_REJECTED:' + json.dumps(details, sort_keys=True), file=sys.__stdout__, flush=True)
