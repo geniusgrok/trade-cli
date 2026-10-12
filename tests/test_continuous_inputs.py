@@ -2,7 +2,7 @@
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 try:
     import pandas as pd
@@ -60,6 +60,29 @@ class PriceBasisTests(unittest.TestCase):
             frame.loc['2026-10-08', 'open'] = value
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'CHECKPOINT_HISTORY_CHANGED'):
                 self.convert(frame)
+
+    def test_native_raw_bars_and_factors_recover_precision_before_cent_rounding(self):
+        raw = self.fresh.copy()
+        raw[['open', 'close', 'high', 'low']] = self.old.iloc[-1][['open', 'close', 'high', 'low']].to_numpy()
+        factors = pd.DataFrame({'date': ['2020-01-01', '2026-10-12'], 'qfq_factor': [1.503, 1.0]})
+        def normalize(frame):
+            value = frame.copy()
+            if 'date' in value:
+                value = value.set_index(pd.to_datetime(value.pop('date')))
+            value.index.name = 'date'
+            return value[['open', 'close', 'high', 'low', 'volume']]
+        providers = types.SimpleNamespace(ak=types.SimpleNamespace(stock_zh_a_daily=Mock(
+            side_effect=[raw.reset_index(names='date'), factors])),
+            _exchange_symbol=lambda code: 'sz' + code, _normalize_columns=normalize,
+            _normalize_provider_volume=lambda frame, provider, symbol: frame)
+        precise = inputs.fetch_precise_sina(providers, '300308', '2026-10-08', '2026-10-12')
+        self.assertAlmostEqual(precise.loc['2026-10-08', 'close'], raw.iloc[0]['close'] / 1.503)
+        self.assertIn('qfq_factor', precise.attrs['basis_factors_csv'])
+        old = normalize(raw.loc[:self.close].copy())
+        old[['open', 'close', 'high', 'low']] = (old[['open', 'close', 'high', 'low']] / 1.5).round(2)
+        restored, proof = inputs.match_price_basis(precise, old, self.close, inputs.prefix_hash(old, self.close))
+        self.assertEqual(inputs.prefix_hash(restored, self.close), inputs.prefix_hash(old, self.close))
+        self.assertTrue(proof['exact_prefix_verified'])
 
 
 if __name__ == '__main__':

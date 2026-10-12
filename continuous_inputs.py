@@ -31,7 +31,7 @@ def match_price_basis(current, committed, close: str, expected: str):
     from quantfusion.data.providers import _normalize_columns
     prices = ('open', 'close', 'high', 'low')
     old, new = committed.loc[:close], current.loc[:close]
-    if (old.empty or not old.index.equals(new.index) or list(old.columns) != list(new.columns)
+    if (old.empty or not old.index.astype('datetime64[ns]').equals(new.index.astype('datetime64[ns]')) or list(old.columns) != list(new.columns)
             or not old['volume'].equals(new['volume'])):
         raise ValueError('CHECKPOINT_HISTORY_CHANGED')
     old_values = [Decimal(str(value)) for value in old[list(prices)].to_numpy().ravel()]
@@ -58,6 +58,35 @@ def match_price_basis(current, committed, close: str, expected: str):
         raise ValueError('CHECKPOINT_HISTORY_CHANGED')
     return adjusted, {'scale': str(scale), 'price_decimals': digits,
                       'committed_prefix_sha256': expected, 'exact_prefix_verified': True}
+
+
+def fetch_precise_sina(providers, code: str, start: str, target: str):
+    """Use Sina raw bars and its qfq factors before AKShare's cent rounding."""
+    import numpy as np
+    import pandas as pd
+    symbol = providers._exchange_symbol(code)
+    raw = providers.ak.stock_zh_a_daily(symbol=symbol, start_date=start, end_date=target, adjust='')
+    raw = providers._normalize_columns(providers._normalize_provider_volume(raw, 'Sina', symbol=code))
+    factors = providers.ak.stock_zh_a_daily(symbol=symbol, adjust='qfq-factor')
+    factors = factors[['date', 'qfq_factor']].copy()
+    factors['date'] = pd.to_datetime(factors['date'], errors='raise').astype('datetime64[ns]')
+    factors['qfq_factor'] = pd.to_numeric(factors['qfq_factor'], errors='raise')
+    factors = factors.sort_values('date')
+    if (factors.empty or factors['date'].duplicated().any() or
+            not np.isfinite(factors['qfq_factor']).all() or (factors['qfq_factor'] <= 0).any() or
+            (factors['date'] > pd.Timestamp(target)).any()):
+        raise ValueError('CHECKPOINT_HISTORY_CHANGED')
+    bars = raw.reset_index()
+    bars['date'] = pd.to_datetime(bars['date'], errors='raise').astype('datetime64[ns]')
+    joined = pd.merge_asof(bars, factors, on='date', direction='backward')
+    if joined['qfq_factor'].isna().any():
+        raise ValueError('CHECKPOINT_HISTORY_CHANGED')
+    for name in ('open', 'close', 'high', 'low'):
+        joined[name] = joined[name] / joined['qfq_factor']
+    precise = providers._normalize_columns(joined.drop(columns=['qfq_factor']))
+    precise.attrs['basis_factors_csv'] = factors.to_csv(index=False)
+    precise.attrs['basis_raw_csv'] = raw.to_csv(index=True)
+    return precise
 
 
 def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
@@ -87,7 +116,8 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
             # Rounded qfq feeds can lose the precision needed to reconstruct
             # the old basis. Try other native complete-history providers once;
             # the exact same hash contract applies to every candidate.
-            candidates = [('Eastmoney', providers._fetch_eastmoney), ('Sina', providers._fetch_sina),
+            candidates = [('SinaFactors', lambda code, start, target: fetch_precise_sina(providers, code, start, target)),
+                          ('Eastmoney', providers._fetch_eastmoney), ('Sina', providers._fetch_sina),
                           ('Tencent', providers._fetch_tencent)]
             start = (pd.Timestamp(ctx.request.start_date) - pd.Timedelta(
                 days=max(400, getattr(ctx.request, 'warmup_days', 365)))).strftime('%Y-%m-%d')
@@ -97,7 +127,8 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
                     continue
                 try:
                     candidate = fetch(code, start, ctx.request.end_date)
-                    candidate = providers._normalize_provider_volume(candidate, provider, symbol=code)
+                    if provider != 'SinaFactors':
+                        candidate = providers._normalize_provider_volume(candidate, provider, symbol=code)
                     candidate = _normalize_columns(candidate).loc[str(committed.index[0].date()):ctx.request.end_date]
                     if candidate.empty or candidate.index[-1] != frame.index[-1]:
                         continue
@@ -117,6 +148,11 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
         path = raw / f'{code}.csv'
         frame.to_csv(path, index=True)
         facts['upstream_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+        for key in ('basis_factors_csv', 'basis_raw_csv'):
+            if key in frame.attrs:
+                evidence = raw / f'{code}_{key}.csv'
+                evidence.write_text(frame.attrs[key])
+                facts[key + '_sha256'] = hashlib.sha256(evidence.read_bytes()).hexdigest()
         facts['upstream_close'] = float(frame['close'].iloc[-1])
         facts['simulation_close'] = float(adjusted['close'].iloc[-1])
         facts['previous_close'] = close
