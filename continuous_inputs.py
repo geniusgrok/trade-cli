@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_EVEN
 import hashlib
+import json
 from pathlib import Path
+import sys
 
 
 def prefix_hash(frame, close: str) -> str:
@@ -78,7 +80,21 @@ def prepare_continuous_inputs(ctx, previous_snapshot: Path) -> dict:
         if prefix_hash(frame, close) == expected[name]:
             continue
         committed = _normalize_columns(pd.read_csv(previous_snapshot / name, float_precision='round_trip'))
-        adjusted, facts = match_price_basis(frame, committed, close, expected[name])
+        try:
+            adjusted, facts = match_price_basis(frame, committed, close, expected[name])
+        except ValueError:
+            before, after = committed.loc[:close], frame.loc[:close]
+            common = before.index.intersection(after.index)
+            samples = list(common[:2]) + list(common[-2:])
+            details = {'symbol': code, 'provider': frame.attrs.get('volume_provider', 'unknown'),
+                'volume_dtype': [str(before['volume'].dtype), str(after['volume'].dtype)],
+                'volume_equal': before['volume'].equals(after['volume']),
+                'price_decimals': max(-Decimal(str(v)).normalize().as_tuple().exponent
+                    for v in before[['open', 'close', 'high', 'low']].to_numpy().ravel()),
+                'samples': [{'date': str(day.date()), 'committed': float(before.loc[day, 'close']),
+                            'upstream': float(after.loc[day, 'close'])} for day in samples]}
+            print('PRICE_BASIS_REJECTED:' + json.dumps(details, sort_keys=True), file=sys.__stdout__, flush=True)
+            raise
         # Retain the complete upstream history and the conversion receipt.
         raw.mkdir(parents=True, exist_ok=True)
         path = raw / f'{code}.csv'
