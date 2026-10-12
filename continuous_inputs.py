@@ -32,7 +32,7 @@ def match_price_basis(current, committed, close: str, expected: str):
     prices = ('open', 'close', 'high', 'low')
     old, new = committed.loc[:close], current.loc[:close]
     if (old.empty or not old.index.astype('datetime64[ns]').equals(new.index.astype('datetime64[ns]')) or list(old.columns) != list(new.columns)
-            or not old['volume'].equals(new['volume'])):
+            or not old['volume'].reset_index(drop=True).equals(new['volume'].reset_index(drop=True))):
         raise ValueError('CHECKPOINT_HISTORY_CHANGED')
     old_values = [Decimal(str(value)) for value in old[list(prices)].to_numpy().ravel()]
     new_values = [Decimal(str(value)) for value in new[list(prices)].to_numpy().ravel()]

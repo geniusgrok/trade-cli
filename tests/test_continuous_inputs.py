@@ -54,6 +54,13 @@ class PriceBasisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'CHECKPOINT_HISTORY_CHANGED'):
             self.convert(expected='0' * 64)
 
+    def test_datetime_storage_units_do_not_change_daily_evidence_identity(self):
+        self.old.index = self.old.index.as_unit('us')
+        self.fresh.index = self.fresh.index.as_unit('ns')
+        adjusted, proof = self.convert()
+        self.assertEqual(inputs.prefix_hash(adjusted, self.close), self.expected)
+        self.assertTrue(proof['exact_prefix_verified'])
+
     def test_corrupt_and_nonpositive_prices_do_not_enter_the_converter(self):
         for value in (float('inf'), 0, -1):
             frame = self.fresh.copy()
