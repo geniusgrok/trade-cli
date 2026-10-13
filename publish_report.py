@@ -2,20 +2,17 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
 import hashlib
 import io
 import json
 import os
 from pathlib import Path
 import re
-import sys
 import tarfile
 import time as clock
 import urllib.error
 import urllib.parse
 import urllib.request
-from zoneinfo import ZoneInfo
 
 from public_report import checked_date, markdown, safe_document
 import runtime_profile as profile
@@ -130,13 +127,16 @@ def verified_report(saved: dict, target: str, bundle: bytes) -> dict:
 def main() -> None:
     profile.require_writer()
     import private_store as store
-    source = profile.source_path()
-    sys.path.insert(0, str(source))
-    from quantfusion.data.sessions import load_calendar
-    from runner import resolve_target
-
-    target, _, gate = resolve_target(load_calendar(), datetime.now(ZoneInfo('Asia/Shanghai')),
-        os.environ.get('TARGET_DATE', ''), os.environ['GITHUB_EVENT_NAME'])
+    receipt = json.loads((Path(os.environ['RUNNER_TEMP']) / 'trade-daily-receipt.json').read_text(encoding='utf-8'))
+    target = checked_date(receipt['target_date'])
+    checked_date(receipt['previous_trading_date'])
+    gate = receipt['gate']
+    if (receipt['run_id'] != os.environ['GITHUB_RUN_ID'] or
+            receipt['attempt'] != int(os.environ['GITHUB_RUN_ATTEMPT']) or
+            receipt['workflow_sha'] != os.environ['GITHUB_SHA'] or
+            receipt['simulation_identity'] != profile.INHERITED or
+            gate not in ('READY', 'HOLIDAY', 'BEFORE_CLOSE')):
+        raise ValueError('RUN_RECEIPT_IDENTITY')
     if gate != 'READY':
         print('休市或尚未收盘，不发布新的盘后日报')
         return

@@ -60,7 +60,11 @@ jobs:
           SOURCE_TOKEN_VARIABLE_PRESENT: ${{ vars.TRADE_SOURCE_TOKEN != '' || vars.TRADE_READ_TOKEN != '' }}
         run: python bootstrap.py
       - name: 核验完整行情复权基准转换
-        run: python -m unittest discover -s tests -p 'test_continuous_inputs.py' -v
+        env:
+          TRADE_CONTRACT_SOURCE: ${{ runner.temp }}/trade-source
+        run: |
+          python -m unittest discover -s tests -p 'test_continuous_inputs.py' -v
+          python -m unittest discover -s tests -p 'test_native_contracts.py' -v
       - name: 执行生产策略并核验原件保存
         run: python runner.py
       - name: 发布中文日报并回读核验

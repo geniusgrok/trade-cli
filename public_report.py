@@ -59,6 +59,11 @@ SIGNAL = {
     'risk_level': '风险等级', 'risk_restrictions': '风险限制',
     'reason_codes': '原因代码', 'strategies': '策略信号',
 }
+INTENT = {
+    'direction': '方向', 'signal_date': '信号日期', 'purpose': '意图用途',
+    'strategy_name': '策略名称', 'blocked': '已受阻', 'blocked_reason': '受阻原因',
+    'executable': '原生执行队列标记',
+}
 EXPLANATIONS = {
     'positive_momentum_hold': '正动量持有', 'choppy': '震荡', 'trend': '趋势',
     'READY': '就绪', 'DEGRADED': '降级', 'INVALID': '无效', 'UNKNOWN': '未知',
@@ -118,12 +123,13 @@ def scalar(value: Any) -> str:
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('|', '\\|').replace('`', '\\`')
 
 
-def intents(values: Any) -> str:
+def intents(values: Any, *, version: int = 2) -> str:
     if values is None:
         return MISSING
     if not isinstance(values, list) or any(not isinstance(v, dict) for v in values):
         raise ValueError('INVALID_PUBLIC_SIGNALS')
-    rows = ['；'.join(f'{label}：{scalar(row[key])}' for key, label in SIGNAL.items() if key in row)
+    fields = SIGNAL if version == 1 else INTENT
+    rows = ['；'.join(f'{label}：{scalar(row[key])}' for key, label in fields.items() if key in row)
             for row in values]
     return ' / '.join(row or '存在记录，未提供可公开的行动字段' for row in rows) if rows else '无记录'
 
@@ -143,7 +149,7 @@ def with_symbol_names(value: Any, names: dict[str, str]) -> str:
                   if match.group(1) in names else match.group(0), text)
 
 
-def changes(report: dict) -> list[str]:
+def changes(report: dict, *, version: int = 2) -> list[str]:
     comparison = report.get('comparison') or {}
     if comparison.get('status') == '不可比较':
         return []
@@ -151,12 +157,13 @@ def changes(report: dict) -> list[str]:
     formats = {}
     for item in get(report, 'observation.symbols') or []:
         code, name = item['code'], item['name']
+        prefix = f'{code} {scalar(name)}' if version == 1 else code
         for field, label in SIGNAL.items():
-            labels[f'{code}.native.{field}'] = f'{code} {scalar(name)}·{label}'
+            labels[f'{code}.native.{field}'] = f'{prefix}·{label}'
         for field, label in [('pending_signals', '待执行意图'), ('blocked_signals', '受阻意图')]:
             path = f'{code}.{field}'
-            labels[path] = f'{code} {scalar(name)}·{label}'
-            formats[path] = intents
+            labels[path] = f'{prefix}·{label}'
+            formats[path] = lambda values: intents(values, version=version)
     result = []
     for change in comparison.get('changes', []):
         path = change.get('field')
@@ -171,6 +178,10 @@ def changes(report: dict) -> list[str]:
 
 
 def markdown(report: dict) -> str:
+    # Saved results without this field retain their original immutable bytes.
+    version = report.get('public_report_version', 1)
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError('UNKNOWN_PUBLIC_REPORT_VERSION')
     target = checked_date(report['target_date'])
     status = report['status']
     if status not in STATUS:
@@ -222,7 +233,7 @@ def markdown(report: dict) -> str:
     comparison = report.get('comparison') or {}
     comparable = comparison.get('status') in {'有变化', '无变化'}
     out.append(f'比较日期：{previous or MISSING} → {target}。')
-    delta = changes(report) if comparable else []
+    delta = changes(report, version=version) if comparable else []
     out.extend(('- ' + row for row in delta) if delta else [
         '公开信号字段无变化。' if comparable else '不可比较：前一交易日结果缺失、未核验或比较口径不一致。'])
     if comparison.get('source_changed'):
@@ -254,7 +265,7 @@ def markdown(report: dict) -> str:
         for item in items:
             native = item.get('native') or {}
             out.append('| ' + ' | '.join([item['code'], scalar(native.get('risk_restrictions')), scalar(native.get('reason_codes')),
-                scalar(native.get('strategies')), intents(item.get('pending_signals')), intents(item.get('blocked_signals'))]) + ' |')
+                scalar(native.get('strategies')), intents(item.get('pending_signals'), version=version), intents(item.get('blocked_signals'), version=version)]) + ' |')
     else:
         out.extend(['', '未取得完整、可展示的逐票结果，不补造信号。'])
     out.extend(['', '## 阅读说明', '', '未提供的字段不解释为零、无风险或无变化。原始枚举保留，中文说明不替代生产输出。',
@@ -262,6 +273,8 @@ def markdown(report: dict) -> str:
                 '零数量或受阻候选不等于可执行买入；待执行意图不代表已成交。',
                 '补存或再次读取日报不会重新计算策略，不改变原结果的日期、版本和状态。',
                 '盘后信号仅供下一可交易日人工核对，不连接券商或下单。'])
+    if version == 2:
+        out.append('原生执行队列标记仅表示模拟队列分类，不保证真实市场可成交。')
     result = '\n'.join(out) + '\n'
     safe_document(result)
     return result

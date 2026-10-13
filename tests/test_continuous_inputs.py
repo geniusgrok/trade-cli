@@ -1,5 +1,7 @@
 """Full-frame basis conversion preserves exact history and rejects revisions."""
 import sys
+from pathlib import Path
+import tempfile
 import types
 import unittest
 from unittest.mock import Mock, patch
@@ -41,6 +43,54 @@ class PriceBasisTests(unittest.TestCase):
         pd.testing.assert_frame_equal(self.fresh, original)
         pd.testing.assert_frame_equal(self.old, old)
         pd.testing.assert_series_equal(adjusted['volume'], original['volume'])
+
+    def test_exact_fallback_prefix_is_accepted_without_changing_any_candidate_bar(self):
+        candidate = pd.concat([self.old, self.old.iloc[-1:].set_axis(pd.to_datetime(['2026-10-12']))])
+        rejected = candidate.copy()
+        rejected.loc['2026-10-08', 'close'] += .02
+        code, name = '300308', 'market_data/300308.csv'
+        fetch = Mock(return_value=candidate.copy())
+        providers = types.ModuleType('quantfusion.data.providers')
+        providers._normalize_columns = lambda frame: frame
+        providers._normalize_provider_volume = lambda frame, provider, symbol: frame
+        providers._fetch_eastmoney = fetch
+        providers._fetch_sina = Mock(side_effect=AssertionError('unused'))
+        providers._fetch_tencent = Mock(side_effect=AssertionError('unused'))
+        data = types.ModuleType('quantfusion.data'); data.providers = providers
+        state = types.ModuleType('quantfusion.io.state_store')
+        state.checkpoint_prefix_hashes = Mock(return_value={name: self.expected})
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(sys.modules, {'quantfusion.data': data,
+                 'quantfusion.data.providers': providers, 'quantfusion.io.state_store': state}), \
+             patch.object(inputs, 'fetch_precise_sina', side_effect=ValueError('synthetic unavailable')):
+            root = Path(directory)
+            (root / name).parent.mkdir()
+            self.old.to_csv(root / name, index_label='date')
+            # The native normalizer returns a daily index, including for restored CSVs.
+            providers._normalize_columns = lambda frame: frame.set_index(pd.to_datetime(frame.pop('date'))) if 'date' in frame else frame
+            ctx = types.SimpleNamespace(request=types.SimpleNamespace(start_date='2026-07-01',
+                end_date='2026-10-12', output_dir=root / 'runtime/output'),
+                snapshot_frames={code: rejected}, prev_risk={'checkpoint': {
+                    'state': {'last_completed_close': self.close}, 'prefix_hashes': {name: self.expected}}})
+            proof = inputs.prepare_continuous_inputs(ctx, root)
+            pd.testing.assert_frame_equal(ctx.snapshot_frames[code], candidate)
+            self.assertEqual(inputs.prefix_hash(ctx.snapshot_frames[code], self.close), self.expected)
+            self.assertEqual(proof[code]['scale'], '1')
+            self.assertEqual(proof[code]['provider'], 'Eastmoney')
+            self.assertEqual(proof[code]['committed_prefix_sha256'], self.expected)
+            self.assertTrue(proof[code]['exact_prefix_verified'])
+            self.assertTrue((root / 'runtime/input_basis/300308.csv').is_file())
+        fetch.assert_called_once()
+
+    def test_exact_basis_still_rejects_revised_volume_dates_and_full_prefix(self):
+        exact = pd.concat([self.old, self.old.iloc[-1:].set_axis(pd.to_datetime(['2026-10-12']))])
+        volume, price, dates = exact.copy(), exact.copy(), exact.copy()
+        volume.iloc[0, volume.columns.get_loc('volume')] += 1
+        price.iloc[0, price.columns.get_loc('close')] += .02
+        dates.index = pd.to_datetime(['2026-10-07', self.close, '2026-10-12'])
+        for frame in (volume, price, dates, exact.iloc[1:]):
+            with self.subTest(frame=frame), self.assertRaisesRegex(ValueError, 'CHECKPOINT_HISTORY_CHANGED'):
+                self.convert(frame)
 
     def test_volume_revision_missing_history_and_isolated_price_correction_fail(self):
         volume, price = self.fresh.copy(), self.fresh.copy()

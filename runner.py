@@ -98,7 +98,7 @@ def prepare_risk_inputs(ctx) -> dict:
             additions[code] = frame
         if frame is None or frame.empty or frame.attrs.get('_stale', False):
             raise ValueError('RISK_INPUT_UNAVAILABLE:' + code)
-        evidence_dates[code] = require_frame_coverage(frame, ctx.scan_dates, code)
+        evidence_dates[code] = require_frame_coverage(frame, ctx.scan_dates, code, allow_certified_suspension=True)
     # Do not expand ctx.symbols or ctx.tradable: these are evidence, not candidates.
     ctx.snapshot_frames.update({code: frame.copy() for code, frame in additions.items()})
     ctx.actual_evidence_dates.update(evidence_dates)
@@ -275,10 +275,10 @@ def validate_native(native: dict, ctx, universe: dict, risk: dict | None) -> dic
     target = ctx.request.end_date
     if native.get('status') != 'ok' or native.get('mode') != 'simulation' or native.get('scan_date') != target or native.get('run_id') != ctx.run_id:
         raise ValueError('NATIVE_RESULT_IDENTITY')
+    from quantfusion.data.sessions import index_coverage, stock_eligibility
     actual = native.get('actual_evidence_dates', {})
-    if any(actual.get(code) != target for code in universe):
+    if any(actual.get(code) != stock_eligibility(code, ctx.scan_dates)['required_quote_date'] for code in universe):
         raise ValueError('STOCK_DATE_COVERAGE')
-    from quantfusion.data.sessions import index_coverage
     indices = index_coverage(ctx.regime_dir, ctx.scan_dates)
     if not indices or any(v['evidence_date'] != target for v in indices.values()):
         raise ValueError('INDEX_DATE_COVERAGE')
@@ -301,11 +301,14 @@ def run() -> tuple[int, str]:
     root = Path(os.environ['RUNNER_TEMP']) / 'trade-runtime'
     (root / 'logs').mkdir(parents=True, exist_ok=True)
     output = root / 'output'; output.mkdir(exist_ok=True)
+    run_receipt = Path(os.environ['RUNNER_TEMP']) / 'trade-daily-receipt.json'
+    run_receipt.unlink(missing_ok=True)
     ident = identity(source)
-    target = os.environ.get('TARGET_DATE', '') or datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+    now = datetime.fromisoformat(ident['started_at'])
+    target = os.environ.get('TARGET_DATE', '') or now.date().isoformat()
     reserved = False
     finalized = False
-    report = {**ident, 'target_date': target, 'status': 'FAILED'}
+    report = {**ident, 'target_date': target, 'status': 'FAILED', 'public_report_version': 2}
     risk = None
     log_path = root / 'logs' / 'production.log'
     with log_path.open('w', encoding='utf-8') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
@@ -323,8 +326,13 @@ def run() -> tuple[int, str]:
             from quantfusion.io.state_store import load_prev_risk_state, save_risk_state, validate_risk_state, require_completed_publication
 
             calendar = load_calendar()
-            target, previous_date, gate = resolve_target(calendar, datetime.now(ZoneInfo('Asia/Shanghai')), os.environ.get('TARGET_DATE', ''), ident['trigger'])
+            target, previous_date, gate = resolve_target(calendar, now, os.environ.get('TARGET_DATE', ''), ident['trigger'])
             report.update(target_date=target, previous_trading_date=previous_date)
+            run_receipt.write_text(json.dumps({
+                'target_date': target, 'previous_trading_date': previous_date, 'gate': gate,
+                'run_id': str(ident['actions_run_id']), 'attempt': ident['actions_run_attempt'],
+                'workflow_sha': ident['workflow_sha'], 'simulation_identity': series.INHERITED,
+            }), encoding='utf-8')
             if gate != 'READY':
                 store.request('event', {'date': target, 'status': gate, 'details': {**ident, 'previous_trading_date': previous_date,
                     'reason': '交易所日历休市' if gate == 'HOLIDAY' else '尚未完成收盘', 'calendar_sources': list(calendar.sources), 'calendar_sha256': calendar.sha256}})
@@ -351,39 +359,32 @@ def run() -> tuple[int, str]:
                 verify_frozen_snapshot(output / 'snapshots' / target)
                 return 0, outcome
             previous = context.get('previous')
-            if series.independent() and not previous:
+            if not previous:
                 raise ValueError('INHERITED_SEED_REQUIRED')
-            if series.independent():
-                series.require_origin(previous.get('state_origin'))
-                report['state_origin'] = previous['state_origin'].copy()
-            if previous:
-                bundle = store.decode_bundle(previous['bundle'], previous['bundle_sha256'])
-                if series.independent():
-                    store.restore(bundle, root, complete=True)
-                else:
-                    store.restore(bundle, root)
-                state = json.loads((output / 'risk_state.json').read_text())
-                if state != previous['risk_state']:
-                    raise ValueError('RESTORED_STATE_MISMATCH')
-                if series.independent():
-                    if state['scan_date'] != previous['date']:
-                        raise ValueError('RESTORED_CLOSE_DATE_MISMATCH')
-                    sections = state.get('checkpoint', {}).get('state', {})
-                    if (validate_risk_state(state) is not None or set(sections) != CHECKPOINT_SECTIONS or
-                            type(sections.get('schema_version')) is not int or sections['schema_version'] != 1):
-                        raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
-                    from quantfusion.data.snapshot import verify_frozen_snapshot
-                    verify_frozen_snapshot(output / 'snapshots' / state['scan_date'])
-            previous_profile = previous.get('profile', {}) if previous else {}
+            series.require_origin(previous.get('state_origin'))
+            report['state_origin'] = previous['state_origin'].copy()
+            bundle = store.decode_bundle(previous['bundle'], previous['bundle_sha256'])
+            store.restore(bundle, root, complete=True)
+            state = json.loads((output / 'risk_state.json').read_text())
+            if state != previous['risk_state']:
+                raise ValueError('RESTORED_STATE_MISMATCH')
+            if state['scan_date'] != previous['date']:
+                raise ValueError('RESTORED_CLOSE_DATE_MISMATCH')
+            sections = state.get('checkpoint', {}).get('state', {})
+            if (validate_risk_state(state) is not None or set(sections) != CHECKPOINT_SECTIONS or
+                    type(sections.get('schema_version')) is not int or sections['schema_version'] != 1):
+                raise ValueError('COMPLETE_INHERITED_STATE_REQUIRED')
+            from quantfusion.data.snapshot import verify_frozen_snapshot
+            verify_frozen_snapshot(output / 'snapshots' / state['scan_date'])
+            previous_profile = previous.get('profile', {})
             start = previous_profile.get('start_date', daily.START_DATE)
             capital = previous_profile.get('capital', daily.INITIAL_CAPITAL)
             arguments = ['--start-date', start, '--end-date', target,
                 '--capital', str(capital), '--cache-dir', str(root / 'cache'),
                 '--regime-data-dir', str(root / 'regime'), '--output-dir', str(output)]
-            local_market = os.environ.get('TRADE_LOCAL_MARKET_DIR', '') if series.independent() else ''
-            if series.independent():
-                arguments.append('--resume')
-                report['continuation'] = {'mode': 'native_full_checkpoint_resume', 'previous_close': previous['date']}
+            local_market = os.environ.get('TRADE_LOCAL_MARKET_DIR', '')
+            arguments.append('--resume')
+            report['continuation'] = {'mode': 'native_full_checkpoint_resume', 'previous_close': previous['date']}
             if local_market:
                 shutil.copytree(Path(os.environ['TRADE_LOCAL_REGIME_DIR']), root / 'regime', dirs_exist_ok=True)
                 arguments.extend(['--local-market-dir', local_market])
@@ -392,7 +393,7 @@ def run() -> tuple[int, str]:
                 seed_contract.require_evidence_provenance(provenance)
                 report['input_evidence'] = provenance
             args = build_argument_parser().parse_args(arguments)
-            dates = resolve_scan_dates(target)
+            dates = resolve_scan_dates(target, now=now)
             def build_context():
                 return ScanContext(ScanRequest.from_args(args, start, target, args.capital), symbols, dates)
 
@@ -429,18 +430,17 @@ def run() -> tuple[int, str]:
             # Rebuild the complete evidence snapshot on each delayed-data retry.
             ctx = prepare_native_with_retry(build_context, load_prev_risk_state, log,
                                             prepare_scan, probe_market, before=before, after=after,
-                pending_session=(target, previous_date) if target == datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+                pending_session=(target, previous_date) if target == now.date().isoformat()
                     and previous['date'] == previous_date else None)
-            if series.independent():
-                from quantfusion.io.state_store import validate_checkpoint_identity
-                try:
-                    validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
-                except ValueError as exc:
-                    if failure_reason(exc) == 'CHECKPOINT_HISTORY_CHANGED':
-                        drift = checkpoint_drift_summary(output / 'snapshots' / previous['date'],
-                            ctx.snapshot_dir, ctx.prev_risk['checkpoint'])
-                        print('CHECKPOINT_INPUT_DRIFT:' + json.dumps(drift, sort_keys=True), file=sys.__stdout__, flush=True)
-                    raise
+            from quantfusion.io.state_store import validate_checkpoint_identity
+            try:
+                validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
+            except ValueError as exc:
+                if failure_reason(exc) == 'CHECKPOINT_HISTORY_CHANGED':
+                    drift = checkpoint_drift_summary(output / 'snapshots' / previous['date'],
+                        ctx.snapshot_dir, ctx.prev_risk['checkpoint'])
+                    print('CHECKPOINT_INPUT_DRIFT:' + json.dumps(drift, sort_keys=True), file=sys.__stdout__, flush=True)
+                raise
             receipt = store.request('start', {'date': target, 'strategy_sha': ident['strategy_sha'],
                                              'previous_date': previous['date'] if previous else None})
             if not receipt.get('started'):
