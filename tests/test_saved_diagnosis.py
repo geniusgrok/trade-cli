@@ -3,6 +3,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import types
@@ -10,6 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import diagnose_saved as diagnosis
+import runtime_profile as series
 
 SYMBOLS = {f'{n:06}': 'fixture' for n in range(1, 18)}
 OLD = 'start=2026-07-01|indicator=warm|capital=2000000.0|warmup=365|deployment=auto'
@@ -75,9 +77,30 @@ class SavedDiagnosisTests(unittest.TestCase):
         self.assertIsNone(facts['coverage'][0]['pre_start_bars'])
         self.assertIsNone(facts['coverage'][0]['warmup_short'])
 
-    def run_diagnosis(self, snapshots):
+    def run_diagnosis(self, snapshots, *, independent=False, source_sha=None, tamper=None):
         records = {'runs/2026-09-30.json.enc': saved('2026-09-30', OLD),
             'runs/2026-10-08.json.enc': saved('2026-10-08', CURRENT)}
+        if independent:
+            for record in records.values():
+                record.update(simulation_identity=series.INHERITED, strategy_sha=series.SOURCE_SHA,
+                              state_origin=series.STATE_ORIGIN.copy())
+                record['report'].update(simulation_identity=series.INHERITED, strategy_sha=series.SOURCE_SHA,
+                                        state_origin=series.STATE_ORIGIN.copy())
+                # Repack the synthetic bundle with its matching independent report.
+                bundle = diagnosis.store.decode_bundle(record['bundle'], record['sha256'])
+                entries = {}
+                with tarfile.open(fileobj=io.BytesIO(bundle), mode='r:gz') as archive:
+                    entries = {item.name: archive.extractfile(item).read() for item in archive}
+                entries['output/daily_report.json'] = json.dumps(record['report']).encode()
+                stream = io.BytesIO()
+                with tarfile.open(fileobj=stream, mode='w:gz') as archive:
+                    for name, content in entries.items():
+                        item = tarfile.TarInfo(name); item.size = len(content)
+                        archive.addfile(item, io.BytesIO(content))
+                record.update(bundle=base64.b64encode(stream.getvalue()).decode(), bytes=len(stream.getvalue()),
+                              sha256=hashlib.sha256(stream.getvalue()).hexdigest())
+        if tamper:
+            records['runs/2026-10-08.json.enc'].update(tamper)
         files = {name: 'b' * 40 for name in records}
         context = types.ModuleType('quantfusion.application.daily_context')
         context.ScanRequest = Mock(return_value=object())
@@ -94,13 +117,80 @@ class SavedDiagnosisTests(unittest.TestCase):
         def read(path, listing):
             self.assertIs(listing, files)
             return records[path]
-        with patch.dict('sys.modules', modules), patch('sys.path', __import__('sys').path.copy()), \
+        with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': series.INHERITED if independent else ''}), \
+             patch.dict('sys.modules', modules), patch('sys.path', __import__('sys').path.copy()), \
              patch.object(diagnosis.store, '_snapshot', side_effect=[(head, 'tree', files) for head in snapshots]), \
              patch.object(diagnosis.store, '_read', side_effect=read), \
              patch.object(diagnosis.store, '_commit', side_effect=AssertionError('must never write')), \
              patch.object(diagnosis.store, 'request', side_effect=AssertionError('must never submit')), \
-             patch.object(diagnosis.subprocess, 'check_output', return_value=SHA):
+             patch.object(diagnosis.subprocess, 'check_output', return_value=source_sha or (series.SOURCE_SHA if independent else SHA)):
             return diagnosis.diagnose(Path('read-only-source'), '2026-10-08')
+
+    def test_current_and_archived_diagnoses_select_matching_identity_and_source(self):
+        current = self.run_diagnosis(['c' * 40, 'c' * 40], independent=True)
+        self.assertEqual(current['simulation_identity'], series.INHERITED)
+        self.assertEqual(current['state_branch'], 'runtime-state-' + series.INHERITED)
+        self.assertEqual(current['source_sha'], series.SOURCE_SHA)
+        archived = self.run_diagnosis(['c' * 40, 'c' * 40])
+        self.assertEqual(archived['simulation_identity'], 'archived')
+        self.assertEqual(archived['state_branch'], 'runtime-state')
+        self.assertEqual(archived['source_sha'], SHA)
+
+    def test_cross_series_and_wrong_source_are_rejected_before_diagnosis(self):
+        with self.assertRaisesRegex(ValueError, 'INDEPENDENT_RECORD_IDENTITY'):
+            self.run_diagnosis(['c' * 40], independent=True, tamper={'simulation_identity': ''})
+        with self.assertRaisesRegex(ValueError, 'INDEPENDENT_SOURCE_IDENTITY'):
+            self.run_diagnosis(['c' * 40], independent=True, source_sha='b' * 40)
+        with self.assertRaisesRegex(ValueError, 'INVALID_SAVED_EVIDENCE'):
+            self.run_diagnosis(['c' * 40], source_sha='b' * 40)
+
+    def test_producer_resolution_uses_authenticated_record_and_only_reads(self):
+        record = saved('2026-10-08', CURRENT)
+        record.update(simulation_identity=series.INHERITED, strategy_sha=series.SOURCE_SHA,
+                      state_origin=series.STATE_ORIGIN.copy())
+        record['report'].update(simulation_identity=series.INHERITED, strategy_sha=series.SOURCE_SHA,
+                                state_origin=series.STATE_ORIGIN.copy())
+        with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': ''}), \
+             patch.object(diagnosis.store, '_snapshot', return_value=('c' * 40, 'tree', {})), \
+             patch.object(diagnosis.store, '_read', return_value=record), \
+             patch.object(diagnosis.store, '_commit', side_effect=AssertionError('read only')):
+            diagnosis.select_series(series.INHERITED)
+            proof = diagnosis.producer('2026-10-08')
+            self.assertEqual(proof['source_sha'], series.SOURCE_SHA)
+            self.assertEqual(proof['state_branch'], 'runtime-state-' + series.INHERITED)
+            self.assertEqual(diagnosis.store._aad('runs/2026-10-08.json.enc'),
+                             (series.INHERITED + '\0runs/2026-10-08.json.enc').encode())
+            diagnosis.select_series('archived')
+            self.assertEqual(diagnosis.store._aad('runs/2026-10-08.json.enc'), b'runs/2026-10-08.json.enc')
+            with self.assertRaisesRegex(ValueError, 'INVALID_SAVED_EVIDENCE'):
+                diagnosis.producer('2026-10-08')
+
+    def test_series_selection_reads_the_matching_branch_and_authenticates_its_blob(self):
+        path = 'runs/2026-10-08.json.enc'
+        for name in (series.INHERITED, 'archived'):
+            with self.subTest(series=name), patch.dict(os.environ, {'STATE_SEAL_KEY': 'synthetic-test-key-' * 3}):
+                diagnosis.select_series(name)
+                record = saved('2026-10-08', CURRENT)
+                if name == series.INHERITED:
+                    record.update(simulation_identity=name, strategy_sha=series.SOURCE_SHA,
+                                  state_origin=series.STATE_ORIGIN.copy())
+                    record['report'].update(simulation_identity=name, strategy_sha=series.SOURCE_SHA,
+                                            state_origin=series.STATE_ORIGIN.copy())
+                sealed = diagnosis.store._seal(record, path)
+                oid = diagnosis.store.blob_id(sealed)
+                def read_api(method, route, **kwargs):
+                    self.assertEqual(method, 'GET')
+                    return {'/git/ref/heads/' + series.state_branch(): {'object': {'sha': 'c' * 40}},
+                        '/git/commits/' + 'c' * 40: {'tree': {'sha': 'd' * 40}},
+                        '/git/trees/' + 'd' * 40 + '?recursive=1': {
+                            'tree': [{'path': path, 'sha': oid, 'type': 'blob'}]},
+                        '/git/blobs/' + oid: {'encoding': 'base64', 'content': base64.b64encode(sealed).decode(),
+                                             'size': len(sealed)}}[route]
+                with patch.object(diagnosis.store, 'api', side_effect=read_api) as api:
+                    proof = diagnosis.producer('2026-10-08')
+                self.assertEqual(api.call_args_list[0].args[1], '/git/ref/heads/' + series.state_branch())
+                self.assertEqual(proof['simulation_identity'], name)
+                self.assertEqual(proof['source_sha'], series.SOURCE_SHA if name == series.INHERITED else SHA)
 
     def test_lock_and_config_metadata_are_preserved_without_funds_or_identity_rewrite(self):
         proof = self.run_diagnosis(['c' * 40, 'c' * 40])

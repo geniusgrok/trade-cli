@@ -6,6 +6,7 @@ from datetime import date
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -13,6 +14,34 @@ import sys
 import tarfile
 
 import private_store as store
+import runtime_profile as series
+
+
+def select_series(name):
+    if name not in (series.INHERITED, 'archived'):
+        raise ValueError('UNKNOWN_SIMULATION_IDENTITY')
+    os.environ['TRADE_SIMULATION_IDENTITY'] = '' if name == 'archived' else name
+
+
+def require_saved_identity(record):
+    series.require_record(record)
+    expected = series.INHERITED if series.independent() else ''
+    if (not record or record.get('simulation_identity', '') != expected or
+            record.get('report', {}).get('simulation_identity', '') != expected or
+            not re.fullmatch('[0-9a-f]{40}', record['report']['strategy_sha'])):
+        raise ValueError('INVALID_SAVED_EVIDENCE')
+
+
+def producer(day):
+    """Resolve an authenticated producer before fetching its diagnostic source."""
+    path = store._path(day)
+    head, _, files = store._snapshot()
+    target = store._read(path, files)
+    require_saved_identity(target)
+    if target['report']['target_date'] != day or target['status'] not in ('SUCCESS', 'DEGRADED'):
+        raise ValueError('INVALID_SAVED_EVIDENCE')
+    return {'source_sha': target['report']['strategy_sha'], 'state_branch': series.state_branch(),
+            'simulation_identity': series.INHERITED if series.independent() else 'archived', 'state_commit': head}
 
 
 def fingerprint_fields(text):
@@ -30,6 +59,7 @@ def fingerprint_fields(text):
 
 
 def inspect_saved(saved, day, references):
+    require_saved_identity(saved)
     bundle = store.decode_bundle(saved['bundle'], saved['sha256'])
     if (len(bundle) != saved['bytes'] or saved['report']['target_date'] != day or saved['status'] not in ('SUCCESS', 'DEGRADED')
             or saved['report']['status'] != saved['status'] or str(saved['report']['actions_run_id']) != saved['run_id']):
@@ -92,20 +122,27 @@ def inspect_saved(saved, day, references):
 
 
 def diagnose(source, day):
+    source_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
+    series.require_source(source_sha)
+    head, _, files = store._snapshot()
+    target_path = store._path(day)
+    target = store._read(target_path, files)
+    require_saved_identity(target)
+    prior_paths = sorted(p for p in files if re.fullmatch(r'runs/\d{4}-\d{2}-\d{2}\.json\.enc', p) and p < target_path)
+    previous = None
+    for path in reversed(prior_paths):
+        record = store._read(path, files)
+        require_saved_identity(record)
+        if record['status'] in ('SUCCESS', 'DEGRADED') and record.get('risk_state') is not None:
+            previous = record
+            break
+    if previous is None or target['report']['strategy_sha'] != source_sha:
+        raise ValueError('INVALID_SAVED_EVIDENCE')
     sys.path.insert(0, str(source))
     from quantfusion.application.daily_context import ScanContext, ScanRequest
     from quantfusion.config.daily import SYMBOLS
     from quantfusion.config.overlay import RISK_BASKET
     from quantfusion.io.state_store import compute_identity_hash
-    source_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
-    head, _, files = store._snapshot()
-    target_path = store._path(day)
-    target = store._read(target_path, files)
-    prior_paths = sorted(p for p in files if re.fullmatch(r'runs/\d{4}-\d{2}-\d{2}\.json\.enc', p) and p < target_path)
-    previous = next((record for path in reversed(prior_paths)
-        if (record := store._read(path, files))['status'] in ('SUCCESS', 'DEGRADED') and record.get('risk_state') is not None), None)
-    if previous is None or target is None or target['report']['strategy_sha'] != source_sha:
-        raise ValueError('INVALID_SAVED_EVIDENCE')
     old = inspect_saved(previous, previous['report']['target_date'], RISK_BASKET)
     current = inspect_saved(target, day, RISK_BASKET)
     profile = current['report']['profile']
@@ -116,6 +153,8 @@ def diagnose(source, day):
     public_fields = lambda value: {key: item for key, item in value.items() if key != 'capital'}
     locks = lambda state: {key: state.get(key) if isinstance(state.get(key), bool) else None for key in ('terminal_risk_lock', 'sector_guard_active')}
     proof = {'target_date': day, 'source_sha': source_sha, 'state_commit': head,
+        'simulation_identity': series.INHERITED if series.independent() else 'archived',
+        'state_branch': series.state_branch(),
         'previous_date': old['report']['target_date'], 'previous_source_sha': old['report']['strategy_sha'],
         'target_ciphertext_oid': files[target_path], 'previous_ciphertext_oid': files[store._path(old['report']['target_date'])],
         'target_bundle_sha256': target['sha256'], 'previous_bundle_sha256': previous['sha256'],
@@ -135,12 +174,24 @@ def diagnose(source, day):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source', type=Path, required=True)
+    parser.add_argument('--source', type=Path)
     parser.add_argument('--date', required=True)
+    parser.add_argument('--series', choices=(series.INHERITED, 'archived'), default=series.INHERITED)
+    parser.add_argument('--producer', action='store_true')
     args = parser.parse_args()
     try:
         store._path(args.date)
-        print(json.dumps(diagnose(args.source, args.date), sort_keys=True, ensure_ascii=False, allow_nan=False))
+        select_series(args.series)
+        if args.producer:
+            proof = producer(args.date)
+            if os.environ.get('GITHUB_OUTPUT'):
+                with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
+                    output.write('source_sha=' + proof['source_sha'] + '\n')
+        else:
+            if args.source is None:
+                raise ValueError('DIAGNOSTIC_SOURCE_REQUIRED')
+            proof = diagnose(args.source, args.date)
+        print(json.dumps(proof, sort_keys=True, ensure_ascii=False, allow_nan=False))
     except Exception:
         print('SAVED_EVIDENCE_DIAGNOSTIC_FAILED; no business state was changed')
         raise SystemExit(1) from None

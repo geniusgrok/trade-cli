@@ -19,7 +19,7 @@ def fixture():
                 'native': {'signal': '观望', 'held_shares': 888888},
                 'quote': {'date': '2026-09-22', 'close': 2.0},
                 'pending_signals': [], 'blocked_signals': []} for i in range(17)]
-    return {'target_date': '2026-09-22', 'previous_trading_date': '2026-09-21',
+    return {'public_report_version': 2, 'target_date': '2026-09-22', 'previous_trading_date': '2026-09-21',
             'data_date': '2026-09-22', 'status': 'DEGRADED', 'strategy_sha': 'a' * 40,
             'actions_run_id': '12345', 'observation': {'market': {'current_decision': {'leaders': {'selected_symbols': ['000000', '000016']}},
                 'summary': {'buys_suppressed': True},
@@ -50,13 +50,13 @@ class PresentationTests(unittest.TestCase):
         marker = 'TRADE_READ_TOKEN'
         value['error'] = marker
         value['observation']['market']['arbitrary'] = {'key': marker}
-        value['observation']['symbols'][0]['pending_signals'] = [{'action': 'BUY', 'quantity': 999999,
+        value['observation']['symbols'][0]['pending_signals'] = [{'direction': 'buy', 'target_shares': 999999,
                                                                  'account_id': marker, 'target_weight': .1}]
         text = report.markdown(value)
         self.assertNotIn(marker, text)
         self.assertNotIn('999999', text)
-        self.assertIn('BUY', text)
-        self.assertIn('目标仓位：0.1', text)
+        self.assertIn('方向：buy', text)
+        self.assertNotIn('目标仓位：0.1', text)
 
     def test_sensitive_allowed_values_rejected_without_echo(self):
         for marker in ['TRADE_READ_TOKEN', 'hello@example.com', 'https://private.example/report',
@@ -76,7 +76,17 @@ class PresentationTests(unittest.TestCase):
         self.assertIn('观望 → BUY', text)
         self.assertNotIn('PRIVATE', text)
         self.assertIn('000000 测试标的0', text)
+        self.assertNotIn('000000 测试标的0 测试标的0', text)
         self.assertNotIn('SECRET', text)
+
+    def test_legacy_saved_result_retains_original_public_bytes(self):
+        value = fixture()
+        value.pop('public_report_version')
+        self.assertEqual(hashlib.sha256(report.markdown(value).encode()).hexdigest(),
+                         '80c5780d1d598f5373d7227c39f6b667bc3e3d038ecb068f94c8d51ab1f5b647')
+        value['public_report_version'] = 3
+        with self.assertRaisesRegex(ValueError, 'UNKNOWN_PUBLIC_REPORT_VERSION'):
+            report.markdown(value)
 
     def test_invalid_or_missing_universe_refused(self):
         value = fixture()

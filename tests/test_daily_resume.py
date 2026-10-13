@@ -199,7 +199,8 @@ class SameDayRunnerTests(unittest.TestCase):
                 'RUNNER_TEMP': directory, 'TRADE_PREFETCHED_SOURCE': directory, 'TARGET_DATE': '2026-09-30'}, clear=True))
             stack.enter_context(patch.object(sys, 'path', sys.path.copy()))
             stack.enter_context(patch.object(runner, 'identity', return_value={
-                'strategy_sha': profile.SOURCE_SHA, 'trigger': 'workflow_dispatch', 'actions_run_id': '90000'}))
+                'strategy_sha': profile.SOURCE_SHA, 'trigger': 'workflow_dispatch', 'actions_run_id': '90000',
+                'started_at': '2026-09-30T23:59:00+08:00', 'actions_run_attempt': 1, 'workflow_sha': 'f' * 40}))
             stack.enter_context(patch.object(runner, 'resolve_target', return_value=('2026-09-30', '2026-09-29', 'READY')))
             api = stack.enter_context(patch.object(store, 'api', side_effect=AssertionError('NO_HTTP')))
             request = stack.enter_context(patch.object(store, 'request',
@@ -207,6 +208,10 @@ class SameDayRunnerTests(unittest.TestCase):
             restore = stack.enter_context(patch.object(store, 'restore', wraps=store.restore))
             verify = stack.enter_context(patch.object(publisher, 'verified_report', wraps=publisher.verified_report))
             result = runner.run()
+            receipt = json.loads((Path(directory) / 'trade-daily-receipt.json').read_text())
+            self.assertEqual(receipt['target_date'], '2026-09-30')
+            self.assertEqual(receipt['gate'], 'READY')
+            self.assertEqual(receipt['run_id'], '90000')
             log = (Path(directory) / 'trade-runtime/logs/production.log').read_text()
             api.assert_not_called()
         for name in ('prepare_scan', 'probe_market', 'run_simulation', 'build_argument_parser', 'publish_scan'):
@@ -284,7 +289,8 @@ class SameDayRunnerTests(unittest.TestCase):
                     'TARGET_DATE': '2026-10-08'}, clear=True))
                 stack.enter_context(patch.object(sys, 'path', sys.path.copy()))
                 stack.enter_context(patch.object(runner, 'identity', return_value={
-                    'strategy_sha': profile.SOURCE_SHA, 'trigger': 'workflow_dispatch', 'actions_run_id': '90000'}))
+                    'strategy_sha': profile.SOURCE_SHA, 'trigger': 'workflow_dispatch', 'actions_run_id': '90000',
+                    'started_at': '2026-10-08T17:00:00+08:00', 'actions_run_attempt': 1, 'workflow_sha': 'f' * 40}))
                 stack.enter_context(patch.object(runner, 'resolve_target',
                     return_value=('2026-10-08', '2026-09-30', 'READY')))
                 api = stack.enter_context(patch.object(store, 'api', side_effect=AssertionError('NO_HTTP')))

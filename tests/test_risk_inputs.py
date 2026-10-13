@@ -49,6 +49,8 @@ class RiskInputTests(unittest.TestCase):
         self.assertEqual(self.ctx.symbols, {'A': 'tradable'})
         self.assertEqual(self.ctx.tradable, self.ctx.symbols)
         self.assertEqual(self.coverage.call_count, 2)
+        self.assertTrue(all(call.kwargs == {'allow_certified_suspension': True}
+                            for call in self.coverage.call_args_list))
 
     def test_existing_evidence_is_reused(self):
         self.ctx.snapshot_frames['B'] = frame()

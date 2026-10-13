@@ -38,6 +38,9 @@ def match_price_basis(current, committed, close: str, expected: str):
     new_values = [Decimal(str(value)) for value in new[list(prices)].to_numpy().ravel()]
     if any(not value.is_finite() or value <= 0 for value in old_values + new_values):
         raise ValueError('CHECKPOINT_HISTORY_CHANGED')
+    if prefix_hash(current, close) == expected:
+        return current.copy(), {'scale': '1', 'committed_prefix_sha256': expected,
+                                'exact_prefix_verified': True}
     digits = max(0, max(-value.normalize().as_tuple().exponent for value in old_values))
     if digits > 6:
         raise ValueError('CHECKPOINT_HISTORY_CHANGED')

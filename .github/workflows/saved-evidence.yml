@@ -8,6 +8,14 @@ on:
         type: string
         required: true
         default: '2026-10-08'
+      series:
+        description: '当前独立系列；archived 仅检查封存系列'
+        type: choice
+        required: true
+        default: a92-inherited-v1
+        options:
+          - a92-inherited-v1
+          - archived
 
 permissions:
   contents: read
@@ -21,21 +29,30 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: geniusgrok/trade
-          ref: main
-          token: ${{ secrets.TRADE_SOURCE_TOKEN || secrets.TRADE_READ_TOKEN }}
-          persist-credentials: false
-          path: .runtime/production
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
       - run: python -m pip install 'cryptography==46.0.0'
+      - name: Resolve authenticated saved producer
+        id: evidence
+        env:
+          REPORT_PUBLISH_TOKEN: ${{ github.token }}
+          STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}
+          SAVED_TARGET_DATE: ${{ inputs.target_date }}
+          SAVED_SERIES: ${{ inputs.series }}
+        run: python diagnose_saved.py --producer --series "$SAVED_SERIES" --date "$SAVED_TARGET_DATE"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: geniusgrok/trade
+          ref: ${{ steps.evidence.outputs.source_sha }}
+          token: ${{ secrets.TRADE_SOURCE_TOKEN || secrets.TRADE_READ_TOKEN }}
+          persist-credentials: false
+          path: .runtime/production
       - run: python -m pip install -r .runtime/production/requirements-lock.txt
       - name: Read existing encrypted evidence only
         env:
           REPORT_PUBLISH_TOKEN: ${{ github.token }}
           STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}
           SAVED_TARGET_DATE: ${{ inputs.target_date }}
-        run: python diagnose_saved.py --source .runtime/production --date "$SAVED_TARGET_DATE"
+          SAVED_SERIES: ${{ inputs.series }}
+        run: python diagnose_saved.py --series "$SAVED_SERIES" --source .runtime/production --date "$SAVED_TARGET_DATE"
