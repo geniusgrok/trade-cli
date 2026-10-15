@@ -71,9 +71,9 @@ class PublicationEntryTests(unittest.TestCase):
             coverage_start='2026-01-01', coverage_end='2026-12-31')
         before = datetime(2026, 9, 22, 23, 59, tzinfo=ZoneInfo('Asia/Shanghai'))
         after = datetime(2026, 9, 23, 0, 1, tzinfo=ZoneInfo('Asia/Shanghai'))
-        self.assertEqual(resolve_target(calendar, before, '', 'workflow_dispatch'),
+        self.assertEqual(resolve_target(calendar, before, ''),
                          ('2026-09-22', '2026-09-21', 'READY'))
-        self.assertEqual(resolve_target(calendar, after, '', 'workflow_dispatch')[2], 'BEFORE_CLOSE')
+        self.assertEqual(resolve_target(calendar, after, '')[2], 'BEFORE_CLOSE')
         self.invoke({'status': 'DEGRADED', 'bundle': 'unused', 'sha256': 'digest'})
         self.request.assert_called_once_with('result', {'date': '2026-09-22'})
         self.publish.assert_called_once_with('2026-09-22', report.markdown(fixture()))
@@ -83,9 +83,9 @@ class PublicationEntryTests(unittest.TestCase):
             coverage_start='2026-01-01', coverage_end='2026-12-31')
         sunday = datetime(2026, 9, 27, 17, tzinfo=ZoneInfo('Asia/Shanghai'))
         monday = datetime(2026, 9, 28, 17, tzinfo=ZoneInfo('Asia/Shanghai'))
-        target, previous, gate = resolve_target(calendar, sunday, '', 'schedule')
+        target, previous, gate = resolve_target(calendar, sunday, '')
         self.assertEqual(gate, 'HOLIDAY')
-        self.assertEqual(resolve_target(calendar, monday, '', 'schedule')[2], 'READY')
+        self.assertEqual(resolve_target(calendar, monday, '')[2], 'READY')
         self.invoke({}, gate=gate, receipt_change={'target_date': target, 'previous_trading_date': previous})
         self.request.assert_not_called()
         self.publish.assert_not_called()

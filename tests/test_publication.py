@@ -59,7 +59,7 @@ class PresentationTests(unittest.TestCase):
         self.assertNotIn('目标仓位：0.1', text)
 
     def test_sensitive_allowed_values_rejected_without_echo(self):
-        for marker in ['TRADE_READ_TOKEN', 'hello@example.com', 'https://private.example/report',
+        for marker in ['TRADE_READ_TOKEN', 'hello@example.com', '`geniusgrok <flyvarfdu@gmail.com>`', 'https://private.example/report',
                        'Bearer abcde', '-----BEGIN PRIVATE KEY-----']:
             value = fixture()
             value['observation']['symbols'][0]['name'] = marker
@@ -116,6 +116,29 @@ class PresentationTests(unittest.TestCase):
             (root / '.github' / 'notes.md').write_text('TRADE_READ_TOKEN')
             with self.assertRaises(ValueError):
                 report.check_docs(root)
+
+    def test_repository_public_documents_are_safe(self):
+        self.assertGreater(report.check_docs(Path(__file__).parents[1]), 0)
+
+    def test_only_root_agents_allows_the_exact_approved_author_marker(self):
+        author = '`geniusgrok <flyvarfdu@gmail.com>`'
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            agents = root / 'AGENTS.md'
+            agents.write_text('Git 作者：' + author)
+            self.assertEqual(report.check_docs(root), 1)
+            for marker in ('hello@example.com', 'TRADE_READ_TOKEN'):
+                agents.write_text(author + '\n' + marker)
+                with self.subTest(marker=marker), self.assertRaisesRegex(ValueError, 'PUBLIC_DOCUMENT_REJECTED'):
+                    report.check_docs(root)
+            agents.write_text(author)
+            for relative in ('README.md', '.github/AGENTS.md'):
+                path = root / relative
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(author)
+                with self.subTest(path=relative), self.assertRaisesRegex(ValueError, 'PUBLIC_DOCUMENT_REJECTED'):
+                    report.check_docs(root)
+                path.unlink()
 
 
 class PublicationTests(unittest.TestCase):
