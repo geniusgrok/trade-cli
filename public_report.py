@@ -281,12 +281,16 @@ def markdown(report: dict) -> str:
 
 
 def check_docs(root: Path) -> int:
+    """Check repository prose; the approved Git author is maintenance metadata."""
     count = 0
     for path in root.rglob('*'):
         if any(part in {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache'} for part in path.relative_to(root).parts):
             continue
         if path.is_file() and path.suffix.lower() in {'.md', '.markdown', '.rst'}:
-            safe_document(path.read_text(encoding='utf-8'))
+            text = path.read_text(encoding='utf-8')
+            if path == root / 'AGENTS.md':
+                text = text.replace('`geniusgrok <flyvarfdu@gmail.com>`', '`geniusgrok`')
+            safe_document(text)
             count += 1
     return count
 

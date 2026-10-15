@@ -41,17 +41,9 @@ def identity(source: Path) -> dict:
     return result
 
 
-def resolve_target(calendar, now: datetime, requested: str, event: str) -> tuple[str, str, str]:
+def resolve_target(calendar, now: datetime, requested: str) -> tuple[str, str, str]:
     today = now.date().isoformat()
     target = requested or today
-    if event == 'push' and not requested:
-        # Deployment acceptance is explicitly the most recent completed session.
-        i = bisect.bisect_right(calendar.sessions, today)
-        if i and calendar.sessions[i - 1] == today and now.time() < time(15, 30):
-            i -= 1
-        if not i:
-            raise ValueError('CALENDAR_OUT_OF_RANGE')
-        target = calendar.sessions[i - 1]
     if not calendar.coverage_start <= target <= calendar.coverage_end or target > today:
         raise ValueError('CALENDAR_OUT_OF_RANGE')
     i = bisect.bisect_left(calendar.sessions, target)
@@ -326,7 +318,7 @@ def run() -> tuple[int, str]:
             from quantfusion.io.state_store import load_prev_risk_state, save_risk_state, validate_risk_state, require_completed_publication
 
             calendar = load_calendar()
-            target, previous_date, gate = resolve_target(calendar, now, os.environ.get('TARGET_DATE', ''), ident['trigger'])
+            target, previous_date, gate = resolve_target(calendar, now, os.environ.get('TARGET_DATE', ''))
             report.update(target_date=target, previous_trading_date=previous_date)
             run_receipt.write_text(json.dumps({
                 'target_date': target, 'previous_trading_date': previous_date, 'gate': gate,

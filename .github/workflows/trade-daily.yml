@@ -10,9 +10,6 @@ on:
         type: string
         required: false
         default: ''
-  push:
-    branches: [main]
-    paths: ['.github/workflows/trade-daily.yml', '*.py', 'tests/**', 'README.md', 'integrity.json']
 
 permissions:
   contents: write

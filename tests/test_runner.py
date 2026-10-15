@@ -20,16 +20,14 @@ class CalendarTests(unittest.TestCase):
     def clock(self, hour):
         return datetime(2026,9,23,hour,1,tzinfo=ZoneInfo('Asia/Shanghai'))
     def test_preclose_never_becomes_today_signal(self):
-        self.assertEqual(resolve_target(self.calendar,self.clock(10),'','schedule'),('2026-09-23','2026-09-22','BEFORE_CLOSE'))
-    def test_deployment_acceptance_is_previous_completed_session(self):
-        self.assertEqual(resolve_target(self.calendar,self.clock(10),'','push'),('2026-09-22','2026-09-21','READY'))
+        self.assertEqual(resolve_target(self.calendar,self.clock(10),''),('2026-09-23','2026-09-22','BEFORE_CLOSE'))
     def test_schedule_targets_today_after_close(self):
-        self.assertEqual(resolve_target(self.calendar,self.clock(17),'','schedule'),('2026-09-23','2026-09-22','READY'))
+        self.assertEqual(resolve_target(self.calendar,self.clock(17),''),('2026-09-23','2026-09-22','READY'))
     def test_future_rejected(self):
-        with self.assertRaises(ValueError): resolve_target(self.calendar,self.clock(17),'2026-09-24','workflow_dispatch')
+        with self.assertRaises(ValueError): resolve_target(self.calendar,self.clock(17),'2026-09-24')
     def test_holiday_returns_actual_latest_session(self):
         now=datetime(2026,9,25,17,1,tzinfo=ZoneInfo('Asia/Shanghai'))
-        self.assertEqual(resolve_target(self.calendar,now,'','schedule'),('2026-09-25','2026-09-24','HOLIDAY'))
+        self.assertEqual(resolve_target(self.calendar,now,''),('2026-09-25','2026-09-24','HOLIDAY'))
 
 
 class NativePreparationRetryTests(unittest.TestCase):

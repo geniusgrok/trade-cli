@@ -44,6 +44,7 @@ class IndependentSeriesTests(unittest.TestCase):
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text()
         self.assertIn("- cron: '6,36 9 * * 1-5'", workflow)
         self.assertIn('  workflow_dispatch:', workflow)
+        self.assertNotIn('  push:', workflow)
         self.assertIn("default: ''", workflow)
         self.assertIn('TRADE_SIMULATION_IDENTITY: a92-inherited-v1', workflow)
         self.assertIn("TARGET_DATE: ${{ inputs.target_date || '' }}", workflow)
