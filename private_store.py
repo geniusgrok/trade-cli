@@ -113,6 +113,18 @@ def _path(day: str) -> str:
     return f'runs/{day}.json.enc'
 
 
+def latest_result() -> tuple[str, dict] | None:
+    _, _, files = _snapshot()
+    path = max((p for p in files if re.fullmatch(r'runs/\d{4}-\d{2}-\d{2}\.json\.enc', p)),
+               default=None)
+    if path is None:
+        return None
+    day = path[5:15]
+    record = _read(_path(day), files)
+    profile.require_record(record)
+    return day, record
+
+
 def request(route: str, payload: dict) -> dict:
     if route in {'start', 'finish', 'event'}:
         profile.require_writer()

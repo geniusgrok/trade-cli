@@ -25,9 +25,9 @@
     "sha256": "25458055814c6879f590d21a27a5a29e34fddbb5a0eecce2dab53b110525ed20"
   },
   "README.md": {
-    "bytes": 10613,
-    "sha256": "1bd5c881c4c666a1630487417304578cd3b24beedc36b9babd64b71915782ab0",
-    "git_blob": "382802c91c261ca6cd32533a74265b9ca0f5a430"
+    "bytes": 10806,
+    "sha256": "2b2c90f25960c3515cfe2804f1580bd3b77ecd25342b9d372000c012b54a9d42",
+    "git_blob": "a9b7e28fe6ac5512659c39fa96c480e7b830f384"
   },
   "approved_seed.enc": {
     "bytes": 645120,
@@ -65,9 +65,9 @@
     "sha256": "8c6f3780d9ff8d8e3635c5d432b47585b5ae07b1226f55c30a5c06fcd152e5dd"
   },
   "private_store.py": {
-    "bytes": 17508,
-    "git_blob": "235999af970ba56bbac50d3c72213e4aa01da4a6",
-    "sha256": "a5de027205c4d75aaa339b180d4c76e3efb54ae8b685131ad76bbba288118bae"
+    "bytes": 17867,
+    "git_blob": "ab8a085709598c33da4d67cbff9b0308775ffd21",
+    "sha256": "6ebc21ddc620e762264ffd512aff6206b0fed75bdad257805a7b6db72ef3f33b"
   },
   "public_report.py": {
     "bytes": 16232,
@@ -85,9 +85,9 @@
     "sha256": "63d96ce0eaca5e394abe045f40d700f8b9e0bba821bf7c009296e9bf8a30397c"
   },
   "runner.py": {
-    "bytes": 31778,
-    "sha256": "50a6531d7ec912a20fb6d781a0df48fc616dc83ebe635565a6b0fa26a2df351f",
-    "git_blob": "84a581230d693ef8e612f743b17b3af9c95e9c5a"
+    "bytes": 33646,
+    "sha256": "076563d149e459a27204021fa75094d281c154a40b1f9d9d09fb3a959ae4d5a2",
+    "git_blob": "8c79f29ff6b2f9411503c00f3d0adcb9425b18d6"
   },
   "runtime_profile.py": {
     "bytes": 2482,
@@ -120,9 +120,9 @@
     "sha256": "c95e7a64eca71e170b95f3e125b4864a85094831a645d2021da13388a2b28765"
   },
   "tests/test_daily_resume.py": {
-    "bytes": 28269,
-    "git_blob": "c4d5e7d95c4f786ad640c471f52f79c5386fe690",
-    "sha256": "fbc89875462bea2d7d9d59d1333a45e94f915496acc3fc1230af69d3206b39fd"
+    "bytes": 29950,
+    "git_blob": "9506637d9c97a91cd3822d7766ce06100af9c188",
+    "sha256": "7bc0c0ff9eadca2dd0d9a37f365a24a39e5c382452981c91641154bd76ecbd8d"
   },
   "tests/test_independent_series.py": {
     "bytes": 11495,
@@ -160,9 +160,9 @@
     "sha256": "7e51f6dd665985b193b099f0d22134b777fc34018e381e5ba8dc9ea26795c3c6"
   },
   "tests/test_runner.py": {
-    "bytes": 12945,
-    "sha256": "c9111093e484ed0273ee819d617593a3c9a3dffcdadd7e33089082d371506cf5",
-    "git_blob": "46158ad305b61a5eb82a4453857fc507ccd09377"
+    "bytes": 15705,
+    "sha256": "5d25ff3bac97753d2dac1e45b9284ae7dfda0a57d756fa8209b66a5e748eacbb",
+    "git_blob": "cf0e5a7aea10b7ac824e992b8b78dc9a341fb227"
   },
   "tests/test_saved_diagnosis.py": {
     "bytes": 13751,

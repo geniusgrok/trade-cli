@@ -11,7 +11,9 @@ from zoneinfo import ZoneInfo
 
 import private_store as store
 import report
-from runner import existing_result_outcome, prepare_native_with_retry, resolve_target, scheduled_target
+import runner
+from runner import existing_result_outcome, prepare_native_with_retry, resolve_target, scheduled_session, scheduled_target
+from test_publication import fixture
 
 
 class CalendarTests(unittest.TestCase):
@@ -54,6 +56,44 @@ class CalendarTests(unittest.TestCase):
                              '2026-11-14T09:06:00Z'))]:
             with self.subTest(cron=cron, run=row), self.assertRaisesRegex(ValueError, 'SCHEDULE_DATE_UNCONFIRMED'):
                 scheduled_target(cron, row, '99')
+
+
+class ScheduledRecoveryTests(unittest.TestCase):
+    calendar = SimpleNamespace(sessions=('2026-10-30', '2026-11-02', '2026-11-03', '2026-11-04'))
+
+    def test_next_trigger_advances_at_most_one_official_session_after_verified_publish(self):
+        report = fixture()
+        saved = {'status': 'DEGRADED', 'run_id': 'old', 'report': report}
+        published = runner.public_markdown(report).encode('utf-8')
+        with patch.object(store, 'latest_result', return_value=('2026-10-30', saved)) as latest, \
+             patch.object(runner, 'read_file', return_value=published) as read:
+            self.assertEqual(scheduled_session(self.calendar, '2026-11-04', 'new', 1), '2026-11-02')
+            read.assert_called_once_with(runner.series.report_path('2026-10-30'), 'main')
+            latest.return_value = ('2026-11-02', saved)
+            self.assertEqual(scheduled_session(self.calendar, '2026-11-04', 'new', 1), '2026-11-03')
+            self.assertEqual(scheduled_session(self.calendar, '2026-11-02', 'new', 2), '2026-11-02')
+            with self.assertRaisesRegex(ValueError, 'SCHEDULE_RERUN_TARGET_UNKNOWN'):
+                scheduled_session(self.calendar, '2026-11-04', 'new', 2)
+            self.assertEqual(scheduled_session(self.calendar, '2026-11-04', 'old', 2), '2026-11-02')
+            read.return_value = b'other report'
+            with self.assertRaisesRegex(ValueError, 'EXISTING_PUBLIC_REPORT_DIFFERS'):
+                scheduled_session(self.calendar, '2026-11-04', 'new', 1)
+
+    def test_no_advance_past_invalid_previous_and_no_seed_publication_required(self):
+        with patch.object(store, 'latest_result', return_value=None) as latest, \
+             patch.object(runner, 'read_file', return_value=None) as read:
+            with self.assertRaisesRegex(ValueError, 'INHERITED_SEED_REQUIRED'):
+                scheduled_session(self.calendar, '2026-11-04', 'new', 1)
+            latest.return_value = ('2026-11-01', {})
+            with self.assertRaisesRegex(ValueError, 'SCHEDULE_STATE_DATE_INVALID'):
+                scheduled_session(self.calendar, '2026-11-04', 'new', 1)
+            for status in ('RUNNING', 'FAILED'):
+                latest.return_value = ('2026-10-30', {'status': status})
+                with self.subTest(status=status), self.assertRaisesRegex(ValueError, 'PREVIOUS_RUN_UNRESOLVED'):
+                    scheduled_session(self.calendar, '2026-11-04', 'new', 1)
+            read.assert_not_called()
+            latest.return_value = ('2026-10-30', {'status': 'SUCCESS', 'run_id': 'seed', 'seed_import': {'proof': 'bound'}})
+            self.assertEqual(scheduled_session(self.calendar, '2026-11-04', 'new', 1), '2026-11-02')
 
 
 class NativePreparationRetryTests(unittest.TestCase):
