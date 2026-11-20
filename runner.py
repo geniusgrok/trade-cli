@@ -4,7 +4,7 @@ import bisect
 import contextlib
 import csv
 from decimal import Decimal, InvalidOperation
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 import importlib.metadata
 import json
 import os
@@ -18,6 +18,7 @@ import shutil
 from zoneinfo import ZoneInfo
 
 import private_store as store
+from publish_report import api
 import report as reporting
 import runtime_profile as series
 
@@ -39,6 +40,25 @@ def identity(source: Path) -> dict:
     if series.independent():
         result['simulation_identity'] = series.INHERITED
     return result
+
+
+def scheduled_target(cron: str, run: dict | None, run_id: str) -> str:
+    weekday = re.fullmatch(r'6,36 9 \* \* ([1-5])', cron)
+    if (not weekday or not isinstance(run, dict) or str(run.get('id')) != run_id or
+            run.get('event') != 'schedule' or not isinstance(run.get('created_at'), str)):
+        raise ValueError('SCHEDULE_DATE_UNCONFIRMED')
+    try:
+        created = datetime.fromisoformat(run['created_at'])
+    except ValueError:
+        raise ValueError('SCHEDULE_DATE_UNCONFIRMED') from None
+    if created.tzinfo is None:
+        raise ValueError('SCHEDULE_DATE_UNCONFIRMED')
+    # Both slots belong to the same close. Registration must fall within the
+    # 24h window starting at 09:06 UTC on the weekday encoded in the event.
+    day = (created.astimezone(UTC) - timedelta(hours=9, minutes=6)).date()
+    if day.isoweekday() != int(weekday[1]):
+        raise ValueError('SCHEDULE_DATE_UNCONFIRMED')
+    return day.isoformat()
 
 
 def resolve_target(calendar, now: datetime, requested: str) -> tuple[str, str, str]:
@@ -216,6 +236,7 @@ def failure_reason(exc: Exception) -> str:
         return 'CHECKPOINT_IDENTITY_CHANGED'
     code = message.split(':', 1)[0]
     allowed = {'ARCHIVED_SERIES_READ_ONLY', 'UNKNOWN_SIMULATION_IDENTITY', 'EXISTING_RESULT_UNUSABLE',
+        'SCHEDULE_DATE_UNCONFIRMED', 'SCHEDULE_PREVIOUS_SESSION_MISSING',
         'PREVIOUS_RUN_UNRESOLVED', 'COMPLETE_INHERITED_STATE_REQUIRED', 'COMPLETE_EXISTING_RESULT_REQUIRED',
         'COMPLETE_PUBLICATION_REQUIRED', 'COMPLETE_PUBLICATION_IDENTITY', 'COMPLETE_SNAPSHOT_REQUIRED',
         'INHERITED_SEED_REQUIRED', 'OUT_OF_ORDER_DATE', 'RESTORED_STATE_MISMATCH', 'RESTORED_CLOSE_DATE_MISMATCH',
@@ -297,7 +318,13 @@ def run() -> tuple[int, str]:
     run_receipt.unlink(missing_ok=True)
     ident = identity(source)
     now = datetime.fromisoformat(ident['started_at'])
-    target = os.environ.get('TARGET_DATE', '') or now.date().isoformat()
+    scheduled = ident['trigger'] == 'schedule'
+    if scheduled:
+        run_id = ident['actions_run_id']
+        target = scheduled_target(os.environ.get('SCHEDULE_CRON', ''),
+                                  api('GET', '/actions/runs/' + run_id), run_id)
+    else:
+        target = os.environ.get('TARGET_DATE', '') or now.date().isoformat()
     reserved = False
     finalized = False
     report = {**ident, 'target_date': target, 'status': 'FAILED', 'public_report_version': 2}
@@ -318,7 +345,7 @@ def run() -> tuple[int, str]:
             from quantfusion.io.state_store import load_prev_risk_state, save_risk_state, validate_risk_state, require_completed_publication
 
             calendar = load_calendar()
-            target, previous_date, gate = resolve_target(calendar, now, os.environ.get('TARGET_DATE', ''))
+            target, previous_date, gate = resolve_target(calendar, now, target)
             report.update(target_date=target, previous_trading_date=previous_date)
             run_receipt.write_text(json.dumps({
                 'target_date': target, 'previous_trading_date': previous_date, 'gate': gate,
@@ -353,6 +380,9 @@ def run() -> tuple[int, str]:
             previous = context.get('previous')
             if not previous:
                 raise ValueError('INHERITED_SEED_REQUIRED')
+            if scheduled and previous['date'] != previous_date:
+                # A later reservation would permanently block the missing dated results.
+                raise ValueError('SCHEDULE_PREVIOUS_SESSION_MISSING')
             series.require_origin(previous.get('state_origin'))
             report['state_origin'] = previous['state_origin'].copy()
             bundle = store.decode_bundle(previous['bundle'], previous['bundle_sha256'])

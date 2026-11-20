@@ -42,7 +42,10 @@ def full_bundle(change=None):
 class IndependentSeriesTests(unittest.TestCase):
     def test_daily_default_and_schedule_share_the_approved_identity(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/trade-daily.yml').read_text()
-        self.assertIn("- cron: '6,36 9 * * 1-5'", workflow)
+        self.assertEqual([line.strip() for line in workflow.splitlines() if '- cron:' in line],
+                         [f"- cron: '6,36 9 * * {day}'" for day in range(1, 6)])
+        self.assertIn('SCHEDULE_CRON: ${{ github.event.schedule }}', workflow)
+        self.assertIn('  actions: read', workflow)
         self.assertIn('  workflow_dispatch:', workflow)
         self.assertNotIn('  push:', workflow)
         self.assertIn("default: ''", workflow)

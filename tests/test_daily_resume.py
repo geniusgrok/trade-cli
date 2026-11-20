@@ -191,20 +191,26 @@ def read_only_source_fixture():
 
 
 class SameDayRunnerTests(unittest.TestCase):
-    def run_saved(self, saved):
+    def run_saved(self, saved, *, scheduled=False, previous=None):
         modules, calls = read_only_source_fixture()
+        modules['quantfusion.data.sessions'].load_calendar.return_value = types.SimpleNamespace(
+            sessions=('2026-09-29', '2026-09-30'), coverage_start='2026-01-01', coverage_end='2026-12-31')
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             stack.enter_context(patch.dict(sys.modules, modules))
             stack.enter_context(patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': profile.INHERITED,
-                'RUNNER_TEMP': directory, 'TRADE_PREFETCHED_SOURCE': directory, 'TARGET_DATE': '2026-09-30'}, clear=True))
+                'RUNNER_TEMP': directory, 'TRADE_PREFETCHED_SOURCE': directory,
+                'SCHEDULE_CRON': '6,36 9 * * 3', 'TARGET_DATE': '' if scheduled else '2026-09-30'}, clear=True))
             stack.enter_context(patch.object(sys, 'path', sys.path.copy()))
             stack.enter_context(patch.object(runner, 'identity', return_value={
-                'strategy_sha': profile.SOURCE_SHA, 'trigger': 'workflow_dispatch', 'actions_run_id': '90000',
-                'started_at': '2026-09-30T23:59:00+08:00', 'actions_run_attempt': 1, 'workflow_sha': 'f' * 40}))
-            stack.enter_context(patch.object(runner, 'resolve_target', return_value=('2026-09-30', '2026-09-29', 'READY')))
+                'strategy_sha': profile.SOURCE_SHA, 'trigger': 'schedule' if scheduled else 'workflow_dispatch',
+                'actions_run_id': '90000', 'started_at': '2026-10-01T02:10:00+08:00',
+                'actions_run_attempt': 1, 'workflow_sha': 'f' * 40}))
+            run_api = stack.enter_context(patch.object(runner, 'api', return_value={
+                'event': 'schedule', 'id': 90000, 'created_at': '2026-09-30T18:09:00Z'}))
             api = stack.enter_context(patch.object(store, 'api', side_effect=AssertionError('NO_HTTP')))
             request = stack.enter_context(patch.object(store, 'request',
-                side_effect=lambda route, payload: {'existing': saved} if route == 'context' else {'saved': True}))
+                side_effect=lambda route, payload: {'existing': saved, 'previous': previous}
+                if route == 'context' else {'saved': True}))
             restore = stack.enter_context(patch.object(store, 'restore', wraps=store.restore))
             verify = stack.enter_context(patch.object(publisher, 'verified_report', wraps=publisher.verified_report))
             result = runner.run()
@@ -214,10 +220,25 @@ class SameDayRunnerTests(unittest.TestCase):
             self.assertEqual(receipt['run_id'], '90000')
             log = (Path(directory) / 'trade-runtime/logs/production.log').read_text()
             api.assert_not_called()
+            if scheduled:
+                run_api.assert_called_once_with('GET', '/actions/runs/90000')
+            else:
+                run_api.assert_not_called()
         for name in ('prepare_scan', 'probe_market', 'run_simulation', 'build_argument_parser', 'publish_scan'):
             calls[name].assert_not_called()
         self.assertNotIn('start', [call.args[0] for call in request.call_args_list])
         return result, calls, restore, verify, request, log
+
+    def test_delayed_cron_reuses_completed_close_but_does_not_leap_over_a_gap(self):
+        saved, _, _ = saved_complete_fixture()
+        result, _, _, _, request, _ = self.run_saved(saved, scheduled=True)
+        self.assertEqual(result, (0, 'EXISTING_RESULT_DEGRADED'))
+        request.assert_called_once_with('context', {'date': '2026-09-30', 'compare_date': '2026-09-29'})
+
+        result, _, restore, _, request, _ = self.run_saved(None, scheduled=True, previous={'date': '2026-09-28'})
+        self.assertEqual(result, (1, 'PRIVATE_DAILY_TASK_FAILED:SCHEDULE_PREVIOUS_SESSION_MISSING'))
+        restore.assert_not_called()
+        self.assertEqual([call.args[0] for call in request.call_args_list], ['context', 'event'])
 
     def test_same_day_complete_result_verifies_and_restores_without_preparation_or_replay(self):
         saved, bundle, _ = saved_complete_fixture()

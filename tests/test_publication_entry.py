@@ -18,7 +18,7 @@ from test_publication import fixture
 
 
 class PublicationEntryTests(unittest.TestCase):
-    def invoke(self, saved, *, gate='READY', receipt_change=None, result=None):
+    def invoke(self, saved, *, gate='READY', receipt_change=None, result=None, event='workflow_dispatch'):
         with tempfile.TemporaryDirectory() as directory:
             receipt = {'target_date': '2026-09-22', 'previous_trading_date': '2026-09-21',
                        'gate': gate, 'run_id': '90000', 'attempt': 1,
@@ -28,7 +28,7 @@ class PublicationEntryTests(unittest.TestCase):
             # A changed target environment or a missing native package cannot change the receipt date.
             with patch.dict('os.environ', {'RUNNER_TEMP': directory, 'GITHUB_RUN_ID': '90000',
                     'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': 'f' * 40, 'TARGET_DATE': '2026-09-23',
-                    'TRADE_SIMULATION_IDENTITY': profile.INHERITED}), \
+                    'TRADE_SIMULATION_IDENTITY': profile.INHERITED, 'GITHUB_EVENT_NAME': event}), \
                  patch.dict(sys.modules, {'quantfusion': None, 'runner': None}), \
                  patch.object(store, 'request', return_value=saved) as request, \
                  patch.object(store, 'decode_bundle', return_value=b'evidence'), \
@@ -60,6 +60,14 @@ class PublicationEntryTests(unittest.TestCase):
             self.invoke({'status': 'RUNNING'})
         self.publish.assert_not_called()
 
+    def test_scheduled_preclose_cannot_succeed_without_publication(self):
+        with self.assertRaisesRegex(ValueError, 'SCHEDULE_REPORT_EXPECTED'):
+            self.invoke({}, gate='BEFORE_CLOSE', event='schedule')
+        self.request.assert_not_called()
+        self.publish.assert_not_called()
+        self.invoke({}, gate='BEFORE_CLOSE')  # Manual intraday inspection still skips.
+        self.publish.assert_not_called()
+
     def test_failed_report_is_published_but_workflow_remains_failed(self):
         value = {**fixture(), 'status': 'FAILED'}
         with self.assertRaisesRegex(ValueError, 'SAVED_RESULT_FAILED'):
@@ -81,12 +89,13 @@ class PublicationEntryTests(unittest.TestCase):
     def test_holiday_receipt_remains_skipped_on_the_following_trading_day(self):
         calendar = SimpleNamespace(sessions=('2026-09-24', '2026-09-28'),
             coverage_start='2026-01-01', coverage_end='2026-12-31')
-        sunday = datetime(2026, 9, 27, 17, tzinfo=ZoneInfo('Asia/Shanghai'))
+        friday = datetime(2026, 9, 25, 17, tzinfo=ZoneInfo('Asia/Shanghai'))
         monday = datetime(2026, 9, 28, 17, tzinfo=ZoneInfo('Asia/Shanghai'))
-        target, previous, gate = resolve_target(calendar, sunday, '')
+        target, previous, gate = resolve_target(calendar, friday, '')
         self.assertEqual(gate, 'HOLIDAY')
         self.assertEqual(resolve_target(calendar, monday, '')[2], 'READY')
-        self.invoke({}, gate=gate, receipt_change={'target_date': target, 'previous_trading_date': previous})
+        self.invoke({}, gate=gate, receipt_change={'target_date': target, 'previous_trading_date': previous},
+                    event='schedule')
         self.request.assert_not_called()
         self.publish.assert_not_called()
 

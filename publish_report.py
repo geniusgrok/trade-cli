@@ -138,6 +138,8 @@ def main() -> None:
             gate not in ('READY', 'HOLIDAY', 'BEFORE_CLOSE')):
         raise ValueError('RUN_RECEIPT_IDENTITY')
     if gate != 'READY':
+        if gate == 'BEFORE_CLOSE' and os.environ.get('GITHUB_EVENT_NAME') == 'schedule':
+            raise ValueError('SCHEDULE_REPORT_EXPECTED')
         print('休市或尚未收盘，不发布新的盘后日报')
         return
     saved = store.request('result', {'date': target})
