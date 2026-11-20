@@ -2,7 +2,12 @@ name: Trade Core17 盘后日报
 
 on:
   schedule:
-    - cron: '6,36 9 * * 1-5'
+    # The matching expression identifies the intended weekday, even after midnight.
+    - cron: '6,36 9 * * 1'
+    - cron: '6,36 9 * * 2'
+    - cron: '6,36 9 * * 3'
+    - cron: '6,36 9 * * 4'
+    - cron: '6,36 9 * * 5'
   workflow_dispatch:
     inputs:
       target_date:
@@ -12,6 +17,7 @@ on:
         default: ''
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -28,6 +34,7 @@ jobs:
       PYTHONUNBUFFERED: '1'
       TRADE_SIMULATION_IDENTITY: a92-inherited-v1
       TARGET_DATE: ${{ inputs.target_date || '' }}
+      SCHEDULE_CRON: ${{ github.event.schedule }}
       REPORT_PUBLISH_TOKEN: ${{ github.token }}
       STATE_SEAL_KEY: ${{ secrets.TRADE_STATE_KEY }}
     steps:

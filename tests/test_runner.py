@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import private_store as store
 import report
-from runner import existing_result_outcome, prepare_native_with_retry, resolve_target
+from runner import existing_result_outcome, prepare_native_with_retry, resolve_target, scheduled_target
 
 
 class CalendarTests(unittest.TestCase):
@@ -28,6 +28,32 @@ class CalendarTests(unittest.TestCase):
     def test_holiday_returns_actual_latest_session(self):
         now=datetime(2026,9,25,17,1,tzinfo=ZoneInfo('Asia/Shanghai'))
         self.assertEqual(resolve_target(self.calendar,now,''),('2026-09-25','2026-09-24','HOLIDAY'))
+
+    def test_registered_slot_survives_shanghai_and_utc_midnight_and_rerun(self):
+        now = datetime.fromisoformat('2026-11-23T02:10:00+08:00')
+        calendar = SimpleNamespace(sessions=('2026-11-12', '2026-11-13', '2026-11-16'),
+                                   coverage_start='2026-01-01', coverage_end='2026-12-31')
+        for stamp in ('2026-11-13T09:06:00Z', '2026-11-13T09:36:00Z',
+                      '2026-11-13T18:10:00Z', '2026-11-14T02:10:00Z'):
+            with self.subTest(created_at=stamp):
+                run = {'id': 99, 'event': 'schedule', 'created_at': stamp}
+                target = scheduled_target('6,36 9 * * 5', run, '99')
+                self.assertEqual(resolve_target(calendar, now, target),
+                                 ('2026-11-13', '2026-11-12', 'READY'))
+        target = scheduled_target('6,36 9 * * 3',
+            {'id': 99, 'event': 'schedule', 'created_at': '2026-10-07T18:10:00Z'}, '99')
+        self.assertEqual(resolve_target(self.calendar, now, target)[2], 'HOLIDAY')
+
+    def test_uncertain_registration_is_not_a_holiday_or_another_session(self):
+        run = {'id': 99, 'event': 'schedule', 'created_at': '2026-11-13T18:10:00Z'}
+        for cron, row in [('6,36 9 * * 1-5', run), ('6,36 9 * * 5', None),
+                          ('6,36 9 * * 5', {**run, 'id': 98}),
+                          ('6,36 9 * * 5', {**run, 'event': 'workflow_dispatch'}),
+                          *(('6,36 9 * * 5', {**run, 'created_at': ts}) for ts in
+                            (None, 'garbage', '2026-11-13T18:10:00', '2026-11-13T09:05:59Z',
+                             '2026-11-14T09:06:00Z'))]:
+            with self.subTest(cron=cron, run=row), self.assertRaisesRegex(ValueError, 'SCHEDULE_DATE_UNCONFIRMED'):
+                scheduled_target(cron, row, '99')
 
 
 class NativePreparationRetryTests(unittest.TestCase):
