@@ -18,7 +18,7 @@ import shutil
 from zoneinfo import ZoneInfo
 
 import private_store as store
-from publish_report import api
+from publish_report import api, markdown as public_markdown, read_file
 import report as reporting
 import runtime_profile as series
 
@@ -75,6 +75,33 @@ def resolve_target(calendar, now: datetime, requested: str) -> tuple[str, str, s
     if target == today and now.time() < time(15, 30):
         return target, previous, 'BEFORE_CLOSE'
     return target, previous, 'READY'
+
+
+def scheduled_session(calendar, nominal: str, run_id: str, attempt: int) -> str:
+    latest = store.latest_result()
+    if latest is None:
+        raise ValueError('INHERITED_SEED_REQUIRED')
+    close, saved = latest
+    i = bisect.bisect_left(calendar.sessions, close)
+    if i == len(calendar.sessions) or calendar.sessions[i] != close:
+        raise ValueError('SCHEDULE_STATE_DATE_INVALID')
+    if close >= nominal:
+        # Exact saved dates can be reused; context rejects missing older dates.
+        return nominal
+    if saved['status'] not in ('SUCCESS', 'DEGRADED'):
+        raise ValueError('PREVIOUS_RUN_UNRESOLVED')
+    if saved['run_id'] == run_id:
+        return close
+    published = read_file(series.report_path(close), 'main')
+    if published is None and not saved.get('seed_import'):
+        return close
+    if published is not None and published != public_markdown(saved['report']).encode('utf-8'):
+        raise ValueError('EXISTING_PUBLIC_REPORT_DIFFERS')
+    # A rerun may already have completed a different date before the latest.
+    # Never make a second reservation for the same Actions run.
+    if attempt > 1:
+        raise ValueError('SCHEDULE_RERUN_TARGET_UNKNOWN')
+    return calendar.sessions[i + 1]  # The verified nominal session is later.
 
 
 def prepare_regime_inputs(data_dir, target: str, scan_dates: dict) -> dict:
@@ -237,6 +264,7 @@ def failure_reason(exc: Exception) -> str:
     code = message.split(':', 1)[0]
     allowed = {'ARCHIVED_SERIES_READ_ONLY', 'UNKNOWN_SIMULATION_IDENTITY', 'EXISTING_RESULT_UNUSABLE',
         'SCHEDULE_DATE_UNCONFIRMED', 'SCHEDULE_PREVIOUS_SESSION_MISSING',
+        'SCHEDULE_STATE_DATE_INVALID', 'SCHEDULE_RERUN_TARGET_UNKNOWN', 'EXISTING_PUBLIC_REPORT_DIFFERS',
         'PREVIOUS_RUN_UNRESOLVED', 'COMPLETE_INHERITED_STATE_REQUIRED', 'COMPLETE_EXISTING_RESULT_REQUIRED',
         'COMPLETE_PUBLICATION_REQUIRED', 'COMPLETE_PUBLICATION_IDENTITY', 'COMPLETE_SNAPSHOT_REQUIRED',
         'INHERITED_SEED_REQUIRED', 'OUT_OF_ORDER_DATE', 'RESTORED_STATE_MISMATCH', 'RESTORED_CLOSE_DATE_MISMATCH',
@@ -330,6 +358,7 @@ def run() -> tuple[int, str]:
     report = {**ident, 'target_date': target, 'status': 'FAILED', 'public_report_version': 2}
     risk = None
     log_path = root / 'logs' / 'production.log'
+    public_log = sys.stdout
     with log_path.open('w', encoding='utf-8') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         try:
             sys.path.insert(0, str(source))
@@ -346,6 +375,12 @@ def run() -> tuple[int, str]:
 
             calendar = load_calendar()
             target, previous_date, gate = resolve_target(calendar, now, target)
+            if scheduled and gate == 'READY':
+                nominal = target
+                target = scheduled_session(calendar, nominal, ident['actions_run_id'], ident['actions_run_attempt'])
+                if target != nominal:
+                    target, previous_date, gate = resolve_target(calendar, now, target)
+                print(f'定时计划日：{nominal}；本次处理：{target}', file=public_log)
             report.update(target_date=target, previous_trading_date=previous_date)
             run_receipt.write_text(json.dumps({
                 'target_date': target, 'previous_trading_date': previous_date, 'gate': gate,
@@ -381,7 +416,7 @@ def run() -> tuple[int, str]:
             if not previous:
                 raise ValueError('INHERITED_SEED_REQUIRED')
             if scheduled and previous['date'] != previous_date:
-                # A later reservation would permanently block the missing dated results.
+                # Catch-up advances only one official session from the saved state.
                 raise ValueError('SCHEDULE_PREVIOUS_SESSION_MISSING')
             series.require_origin(previous.get('state_origin'))
             report['state_origin'] = previous['state_origin'].copy()

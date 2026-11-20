@@ -42,6 +42,17 @@ def independent_record(status='DEGRADED', risk=None):
 
 
 class ArchivedAndContextTests(unittest.TestCase):
+    def test_latest_result_reads_only_the_newest_dated_record_not_an_audit_event(self):
+        old, new = ('runs/2026-10-29.json.enc', 'runs/2026-10-30.json.enc')
+        audit = 'events/2026-11-04/90000-1-HOLIDAY.json.enc'
+        saved = independent_record()
+        files = {old: 'old', new: 'new', audit: 'audit'}
+        with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': profile.INHERITED}), \
+             patch.object(store, '_snapshot', return_value=('head', 'tree', files)), \
+             patch.object(store, '_read', return_value=saved) as read:
+            self.assertEqual(store.latest_result(), ('2026-10-30', saved))
+            read.assert_called_once_with(new, files)
+
     def test_blank_runner_and_archived_writers_reject_before_any_api(self):
         with patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': ''}), \
              patch.object(store, 'api') as api, patch.object(store, '_snapshot') as snapshot, \
@@ -191,23 +202,29 @@ def read_only_source_fixture():
 
 
 class SameDayRunnerTests(unittest.TestCase):
-    def run_saved(self, saved, *, scheduled=False, previous=None):
+    def run_saved(self, saved, *, scheduled=False, previous=None, latest=None):
         modules, calls = read_only_source_fixture()
         modules['quantfusion.data.sessions'].load_calendar.return_value = types.SimpleNamespace(
-            sessions=('2026-09-29', '2026-09-30'), coverage_start='2026-01-01', coverage_end='2026-12-31')
+            sessions=('2026-09-29', '2026-09-30', '2026-10-08'),
+            coverage_start='2026-01-01', coverage_end='2026-12-31')
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             stack.enter_context(patch.dict(sys.modules, modules))
             stack.enter_context(patch.dict(os.environ, {'TRADE_SIMULATION_IDENTITY': profile.INHERITED,
                 'RUNNER_TEMP': directory, 'TRADE_PREFETCHED_SOURCE': directory,
-                'SCHEDULE_CRON': '6,36 9 * * 3', 'TARGET_DATE': '' if scheduled else '2026-09-30'}, clear=True))
+                'SCHEDULE_CRON': '6,36 9 * * 3' if latest is None else '6,36 9 * * 4',
+                'TARGET_DATE': '' if scheduled else '2026-09-30'}, clear=True))
             stack.enter_context(patch.object(sys, 'path', sys.path.copy()))
             stack.enter_context(patch.object(runner, 'identity', return_value={
                 'strategy_sha': profile.SOURCE_SHA, 'trigger': 'schedule' if scheduled else 'workflow_dispatch',
-                'actions_run_id': '90000', 'started_at': '2026-10-01T02:10:00+08:00',
+                'actions_run_id': '90000', 'started_at': '2026-10-09T02:10:00+08:00',
                 'actions_run_attempt': 1, 'workflow_sha': 'f' * 40}))
             run_api = stack.enter_context(patch.object(runner, 'api', return_value={
-                'event': 'schedule', 'id': 90000, 'created_at': '2026-09-30T18:09:00Z'}))
+                'event': 'schedule', 'id': 90000,
+                'created_at': '2026-09-30T18:09:00Z' if latest is None else '2026-10-08T18:09:00Z'}))
             api = stack.enter_context(patch.object(store, 'api', side_effect=AssertionError('NO_HTTP')))
+            newest = stack.enter_context(patch.object(store, 'latest_result',
+                return_value=latest or ('2026-09-30', saved)))
+            stack.enter_context(patch.object(runner, 'read_file', return_value=None))
             request = stack.enter_context(patch.object(store, 'request',
                 side_effect=lambda route, payload: {'existing': saved, 'previous': previous}
                 if route == 'context' else {'saved': True}))
@@ -222,8 +239,10 @@ class SameDayRunnerTests(unittest.TestCase):
             api.assert_not_called()
             if scheduled:
                 run_api.assert_called_once_with('GET', '/actions/runs/90000')
+                newest.assert_called_once_with()
             else:
                 run_api.assert_not_called()
+                newest.assert_not_called()
         for name in ('prepare_scan', 'probe_market', 'run_simulation', 'build_argument_parser', 'publish_scan'):
             calls[name].assert_not_called()
         self.assertNotIn('start', [call.args[0] for call in request.call_args_list])
@@ -239,6 +258,14 @@ class SameDayRunnerTests(unittest.TestCase):
         self.assertEqual(result, (1, 'PRIVATE_DAILY_TASK_FAILED:SCHEDULE_PREVIOUS_SESSION_MISSING'))
         restore.assert_not_called()
         self.assertEqual([call.args[0] for call in request.call_args_list], ['context', 'event'])
+
+    def test_next_trigger_reuses_unpublished_prior_result_with_its_original_receipt_date(self):
+        saved, bundle, _ = saved_complete_fixture()
+        result, _, _, verify, request, _ = self.run_saved(
+            saved, scheduled=True, latest=('2026-09-30', saved))
+        self.assertEqual(result, (0, 'EXISTING_RESULT_DEGRADED'))
+        verify.assert_called_once_with(saved, '2026-09-30', bundle)
+        request.assert_called_once_with('context', {'date': '2026-09-30', 'compare_date': '2026-09-29'})
 
     def test_same_day_complete_result_verifies_and_restores_without_preparation_or_replay(self):
         saved, bundle, _ = saved_complete_fixture()
