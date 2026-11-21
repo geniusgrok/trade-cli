@@ -104,14 +104,62 @@ def scheduled_session(calendar, nominal: str, run_id: str, attempt: int) -> str:
     return calendar.sessions[i + 1]  # The verified nominal session is later.
 
 
-def prepare_regime_inputs(data_dir, target: str, scan_dates: dict) -> dict:
+def prepare_regime_inputs(data_dir, target: str, scan_dates: dict, *, historical_recovery=False) -> dict:
     """Prepare live inputs using native providers without changing strategy code."""
-    from quantfusion.data.contracts import refresh_regime_indices
+    from quantfusion.data import contracts
     from quantfusion.data.sessions import index_coverage
 
-    refresh = refresh_regime_indices(
-        data_dir, end_date=target, strict=True, allow_provider_fallback=True
-    )
+    if historical_recovery:
+        import pandas as pd
+        root = Path(data_dir)
+        boundary = pd.Timestamp(target)
+        if contracts.is_frozen_data_directory(root):
+            raise ValueError('HISTORICAL_INDEX_DIRECTORY_FROZEN')
+
+        def require_target(frame):
+            if frame['date'].iloc[-1] != target:
+                raise ValueError('HISTORICAL_INDEX_TARGET_MISSING')
+            return frame
+
+        # Pinned native refresh keeps ordinary historical replays offline.
+        # Scheduled recovery needs a complete new history for the missing close.
+        frames, indices = {}, {}
+        for code, symbol in contracts.INDEX_SYMBOLS.items():
+            try:
+                raw = pd.read_csv(root / f'{code}.csv')
+                # Native coverage normalizes before checking. Do not copy
+                # restored raw CSV bytes that also carry later dates.
+                if (pd.to_datetime(raw['date']) <= boundary).all():
+                    restored = require_target(contracts._normalize_index_frame(raw, end_date=target))
+                    indices[code] = {'provider': 'Restored', 'last_date': target, 'rows': len(restored)}
+                    continue
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            provider = 'Eastmoney'
+            try:
+                raw = contracts._fetch_index_frame(symbol, end_timestamp=boundary)
+                frame = require_target(contracts._normalize_index_frame(raw, end_date=target))
+            except (OSError, RuntimeError, TypeError, ValueError):
+                try:
+                    raw, provider = contracts._fetch_fallback_index_frame(code, end_timestamp=boundary)
+                    if provider == 'Tencent' and raw['date'].iloc[-1] != target:
+                        # A stale but structurally valid Tencent response does
+                        # not make the native fallback try Sina.
+                        raw = contracts._normalize_index_frame(
+                            contracts.ak.stock_zh_index_daily(symbol=f'sh{code}'), end_date=target)
+                        provider = 'Sina'
+                    frame = require_target(raw)
+                except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+                    raise ValueError(f'HISTORICAL_INDEX_UNAVAILABLE:{code}') from exc
+            frames[code] = frame
+            indices[code] = {'provider': provider, 'last_date': target, 'rows': len(frame)}
+        for code, frame in frames.items():
+            contracts._atomic_csv(frame, root / f'{code}.csv')
+        refresh = {'mode': 'historical_target_cutoff' if frames else 'historical_verified_existing', 'indices': indices}
+    else:
+        refresh = contracts.refresh_regime_indices(
+            data_dir, end_date=target, strict=True, allow_provider_fallback=True
+        )
     # A preserved file or a successful HTTP response is not date coverage.
     coverage = index_coverage(data_dir, scan_dates)
     return {'refresh': refresh, 'coverage': coverage}
@@ -269,6 +317,7 @@ def failure_reason(exc: Exception) -> str:
         'COMPLETE_PUBLICATION_REQUIRED', 'COMPLETE_PUBLICATION_IDENTITY', 'COMPLETE_SNAPSHOT_REQUIRED',
         'INHERITED_SEED_REQUIRED', 'OUT_OF_ORDER_DATE', 'RESTORED_STATE_MISMATCH', 'RESTORED_CLOSE_DATE_MISMATCH',
         'CURRENT_BAR_UNAVAILABLE', 'NATIVE_PREPARATION_FAILED', 'RESUME_INTERVAL_INVALID', 'RESUME_FRAME_INVENTORY',
+        'INDEX_EVIDENCE_UNAVAILABLE', 'HISTORICAL_INDEX_UNAVAILABLE', 'HISTORICAL_INDEX_DIRECTORY_FROZEN',
         'RESUME_UNEXPECTED_EVIDENCE_DATE', 'RESUME_PRE_LISTING_CONFLICT', 'RESUME_HISTORY_GAP',
         'RESUME_ECONOMIC_SESSION_MISSING', 'FROZEN_INDEX_IDENTITY_MISMATCH', 'BUNDLE_INTEGRITY', 'UNSAFE_BUNDLE'}
     allowed.add('CHECKPOINT_HISTORY_CHANGED')
@@ -465,7 +514,8 @@ def run() -> tuple[int, str]:
                     from quantfusion.data.sessions import index_coverage
                     report['index_preparation'] = {'mode': 'local_read_only', 'coverage': index_coverage(ctx.request.regime_data_dir, dates)}
                 else:
-                    report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates)
+                    report['index_preparation'] = prepare_regime_inputs(ctx.request.regime_data_dir, target, dates,
+                        historical_recovery=scheduled and target < (now.date() - timedelta(days=2)).isoformat())
                 report['phase'] = 'NATIVE_PREPARATION'
 
             def after(ctx):
