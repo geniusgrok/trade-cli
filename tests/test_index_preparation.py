@@ -126,6 +126,14 @@ class HistoricalIndexRecoveryTests(unittest.TestCase):
             self.prepare()
         self.assertEqual(self.contracts._fetch_index_frame.call_count, 2)
 
+    def test_existing_target_complete_index_is_not_refetched_but_future_rows_are_replaced(self):
+        self.new.iloc[:-1].to_csv(self.root / '000300.csv', index=False)
+        self.new.to_csv(self.root / '000682.csv', index=False)
+        result = self.prepare()
+        self.assertEqual(result['refresh']['indices']['000300']['provider'], 'Restored')
+        self.contracts._fetch_index_frame.assert_called_once_with('csi000682', end_timestamp=pd.Timestamp(self.target))
+        self.assertEqual(pd.read_csv(self.root / '000682.csv')['date'].iloc[-1], self.target)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -85,9 +85,9 @@
     "sha256": "63d96ce0eaca5e394abe045f40d700f8b9e0bba821bf7c009296e9bf8a30397c"
   },
   "runner.py": {
-    "bytes": 36519,
-    "sha256": "5c052a44f7df0ac9de47704e40421b0b7fe6780fb89624bc35b5e3b4c7db2f6c",
-    "git_blob": "280cdd8d261555862eade0af2ffcd335e836a335"
+    "bytes": 36617,
+    "sha256": "ce62334890215e46c90e062a0dd02f8e4b13ba9b675ad32add80f08f04acc224",
+    "git_blob": "c7c5363c812265007df747027b05a678d55da937"
   },
   "runtime_profile.py": {
     "bytes": 2482,
@@ -130,9 +130,9 @@
     "git_blob": "63ef1abe3046af24deef6eec87126bd4f3daf73c"
   },
   "tests/test_index_preparation.py": {
-    "bytes": 6975,
-    "git_blob": "d33dc518679745b47985927a59d2a80c796dd8c4",
-    "sha256": "6945325b192921ca037075b53e122fe90f2bae01614a0df92d056f5d1aadac46"
+    "bytes": 7544,
+    "git_blob": "0562fb61918323b50180add414c0d74355246945",
+    "sha256": "f54ddb1a2a454043f0ad547e6109d8304cf8ae234d5725044e9e8a8970a772ec"
   },
   "tests/test_native_contracts.py": {
     "bytes": 5248,

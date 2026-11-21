@@ -115,15 +115,6 @@ def prepare_regime_inputs(data_dir, target: str, scan_dates: dict, *, historical
         boundary = pd.Timestamp(target)
         if contracts.is_frozen_data_directory(root):
             raise ValueError('HISTORICAL_INDEX_DIRECTORY_FROZEN')
-        try:
-            coverage = index_coverage(root, scan_dates)
-            # index_coverage checks the normalized view, not whether copied
-            # CSV bytes would retain rows after the target.
-            if all((pd.to_datetime(pd.read_csv(root / f'{code}.csv', usecols=['date'])['date'])
-                    <= boundary).all() for code in contracts.INDEX_SYMBOLS):
-                return {'refresh': {'mode': 'historical_verified_existing'}, 'coverage': coverage}
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
 
         def require_target(frame):
             if frame['date'].iloc[-1] != target:
@@ -134,6 +125,16 @@ def prepare_regime_inputs(data_dir, target: str, scan_dates: dict, *, historical
         # Scheduled recovery needs a complete new history for the missing close.
         frames, indices = {}, {}
         for code, symbol in contracts.INDEX_SYMBOLS.items():
+            try:
+                raw = pd.read_csv(root / f'{code}.csv')
+                # Native coverage normalizes before checking. Do not copy
+                # restored raw CSV bytes that also carry later dates.
+                if (pd.to_datetime(raw['date']) <= boundary).all():
+                    restored = require_target(contracts._normalize_index_frame(raw, end_date=target))
+                    indices[code] = {'provider': 'Restored', 'last_date': target, 'rows': len(restored)}
+                    continue
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
             provider = 'Eastmoney'
             try:
                 raw = contracts._fetch_index_frame(symbol, end_timestamp=boundary)
@@ -154,7 +155,7 @@ def prepare_regime_inputs(data_dir, target: str, scan_dates: dict, *, historical
             indices[code] = {'provider': provider, 'last_date': target, 'rows': len(frame)}
         for code, frame in frames.items():
             contracts._atomic_csv(frame, root / f'{code}.csv')
-        refresh = {'mode': 'historical_target_cutoff', 'indices': indices}
+        refresh = {'mode': 'historical_target_cutoff' if frames else 'historical_verified_existing', 'indices': indices}
     else:
         refresh = contracts.refresh_regime_indices(
             data_dir, end_date=target, strict=True, allow_provider_fallback=True
