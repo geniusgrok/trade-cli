@@ -76,8 +76,12 @@ def fetch_precise_sina(providers, code: str, start: str, target: str):
     factors['qfq_factor'] = pd.to_numeric(factors['qfq_factor'], errors='raise')
     factors = factors.sort_values('date')
     if (factors.empty or factors['date'].duplicated().any() or
-            not np.isfinite(factors['qfq_factor']).all() or (factors['qfq_factor'] <= 0).any() or
-            (factors['date'] > pd.Timestamp(target)).any()):
+            not np.isfinite(factors['qfq_factor']).all() or (factors['qfq_factor'] <= 0).any()):
+        raise ValueError('CHECKPOINT_HISTORY_CHANGED')
+    # Sina may return the complete factor archive for a historical request.
+    # Use no post-target factor; the committed prefix must still match exactly.
+    factors = factors.loc[factors['date'] <= pd.Timestamp(target)].copy()
+    if factors.empty:
         raise ValueError('CHECKPOINT_HISTORY_CHANGED')
     bars = raw.reset_index()
     bars['date'] = pd.to_datetime(bars['date'], errors='raise').astype('datetime64[ns]')

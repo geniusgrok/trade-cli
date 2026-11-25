@@ -32,12 +32,18 @@ def observation(native: dict, universe: dict, quotes: dict) -> dict:
                       'native': by_code[code],
                       'pending_signals': [s for s in native.get('pending_signals', []) if s.get('symbol') == code],
                       'blocked_signals': [s for s in native.get('blocked_signals', []) if s.get('symbol') == code]})
-    return {'market': {'current_decision': native.get('deployment', {}).get('current_decision'),
-                       'risk_opinion': native.get('risk_opinion'),
-                       'account_risk_budget': native.get('account_risk_budget'),
-                       'warmup_health': native.get('warmup_health'),
-                       'summary': native.get('summary'),
-                       'portfolio': native.get('portfolio')}, 'symbols': items}
+    market = {'current_decision': native.get('deployment', {}).get('current_decision'),
+              'risk_opinion': native.get('risk_opinion'),
+              'account_risk_budget': native.get('account_risk_budget'),
+              'warmup_health': native.get('warmup_health'),
+              'summary': native.get('summary'),
+              'portfolio': native.get('portfolio')}
+    # Complete native evidence stays encrypted. The public renderer has its
+    # own explicit versioned allowlist, not a complete account-object dump.
+    for field in ('major_damage_tactical', 'held_structure_risk', 'sleeve_capital_reweight'):
+        if native.get(field) is not None:
+            market[field] = native[field]
+    return {'market': market, 'symbols': items}
 
 
 def _diff(old: Any, new: Any, path: str) -> list[dict]:

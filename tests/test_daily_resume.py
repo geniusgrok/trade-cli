@@ -374,7 +374,9 @@ class FakeFrame:
         return not self.index
     def __getitem__(self, key):
         if isinstance(key, slice):
-            return FakeFrame([day.isoformat() for day in self.index if day.isoformat() <= key.stop])
+            return FakeFrame([day.isoformat() for day in self.index
+                              if (key.start is None or day.isoformat() >= key.start)
+                              and (key.stop is None or day.isoformat() <= key.stop)])
         if key == 'date':
             return list(self.index)
         raise KeyError(key)
@@ -386,7 +388,7 @@ class ResumeIntervalTests(unittest.TestCase):
         self.calendar = types.SimpleNamespace(sessions=('2026-09-21', *self.days))
         self.ctx = types.SimpleNamespace(request=types.SimpleNamespace(end_date=self.days[-1], regime_data_dir='/fixture'),
             snapshot_frames={code: FakeFrame(self.days) for code in ('T', 'NEW', 'RISK', 'REG')},
-            symbols={'T': 'trading', 'NEW': 'candidate'}, tradable={'T': 'trading'}, scan_dates={})
+            symbols={'T': 'trading', 'NEW': 'candidate'}, tradable={'T': 'trading'}, scan_dates={'calendar_coverage_start': '2026-09-21'})
         self.indices = {code: FakeFrame(self.days) for code in ('000300', '000682')}
         self.listed_from = {}
         self.suspensions = {}

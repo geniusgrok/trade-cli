@@ -40,6 +40,7 @@ def main() -> int:
     env['GIT_CONFIG_KEY_0'] = 'http.https://github.com/.extraheader'
     env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + token).encode()).decode()
     phase = 'SOURCE_CLONE'
+    source_sha = profile.bootstrap_source()
     with (logs / 'setup.log').open('wb') as log:
         try:
             if not prefetched:
@@ -48,12 +49,14 @@ def main() -> int:
                 subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '/quantfusion/', '/data/trading_calendar.json', '/requirements*.txt', '/pyproject.toml', '/AGENTS.md', '/README.md'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
                 phase = 'SOURCE_CHECKOUT'
                 if profile.independent():
-                    subprocess.run(['git', 'fetch', '--depth=1', 'origin', profile.SOURCE_SHA], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
-                    subprocess.run(['git', 'checkout', '--detach', profile.SOURCE_SHA], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+                    subprocess.run(['git', 'fetch', '--depth=1', 'origin', source_sha], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
+                    subprocess.run(['git', 'checkout', '--detach', source_sha], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
                 else:
                     subprocess.run(['git', 'checkout', 'main'], cwd=source, env=env, stdout=log, stderr=log, check=True, timeout=180)
             if profile.independent():
-                profile.require_source(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, env=env, stderr=log, text=True).strip())
+                actual_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, env=env, stderr=log, text=True).strip()
+                if actual_sha != source_sha:
+                    raise ValueError('INDEPENDENT_SOURCE_IDENTITY')
                 if subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=source, env=env, stderr=log, text=True).strip():
                     raise ValueError('INDEPENDENT_SOURCE_MODIFIED')
             phase = 'LOCK_VALIDATION'

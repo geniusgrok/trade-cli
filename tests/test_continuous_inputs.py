@@ -121,7 +121,7 @@ class PriceBasisTests(unittest.TestCase):
     def test_native_raw_bars_and_factors_recover_precision_before_cent_rounding(self):
         raw = self.fresh.copy()
         raw[['open', 'close', 'high', 'low']] = self.old.iloc[-1][['open', 'close', 'high', 'low']].to_numpy()
-        factors = pd.DataFrame({'date': ['2020-01-01', '2026-10-12'], 'qfq_factor': [1.503, 1.0]})
+        factors = pd.DataFrame({'date': ['2020-01-01', '2026-10-12', '2026-10-13'], 'qfq_factor': [1.503, 1.0, 0.75]})
         def normalize(frame):
             value = frame.copy()
             if 'date' in value:
@@ -135,6 +135,7 @@ class PriceBasisTests(unittest.TestCase):
         precise = inputs.fetch_precise_sina(providers, '300308', '2026-10-08', '2026-10-12')
         self.assertAlmostEqual(precise.loc['2026-10-08', 'close'], raw.iloc[0]['close'] / 1.503)
         self.assertIn('qfq_factor', precise.attrs['basis_factors_csv'])
+        self.assertNotIn('2026-10-13', precise.attrs['basis_factors_csv'])
         old = normalize(raw.loc[:self.close].copy())
         old[['open', 'close', 'high', 'low']] = (old[['open', 'close', 'high', 'low']] / 1.5).round(2)
         restored, proof = inputs.match_price_basis(precise, old, self.close, inputs.prefix_hash(old, self.close))

@@ -50,7 +50,7 @@ def validate_manifest(manifest: dict, cipher: bytes | None = None) -> None:
     if (set(manifest) != MANIFEST_FIELDS or type(manifest['schema_version']) is not int or
             manifest['schema_version'] != 1 or manifest['identity'] != profile.INHERITED or
             manifest['old_source'] != profile.STATE_ORIGIN['old_source'] or
-            manifest['cutover_source'] != profile.SOURCE_SHA or manifest['baseline_close'] != '2026-09-30' or
+            manifest['cutover_source'] != profile.SEED_SOURCE_SHA or manifest['baseline_close'] != '2026-09-30' or
             manifest['evidence_date'] != '2026-10-08' or manifest['cipher_file'] != 'approved_seed.enc'):
         raise ValueError('IMPORT_MANIFEST_IDENTITY')
     profile.require_origin(manifest['state_origin'])

@@ -123,7 +123,7 @@ def inspect_saved(saved, day, references):
 
 def diagnose(source, day):
     source_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
-    series.require_source(source_sha)
+    series.require_lineage_source(source_sha)
     head, _, files = store._snapshot()
     target_path = store._path(day)
     target = store._read(target_path, files)

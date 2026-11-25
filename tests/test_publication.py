@@ -84,7 +84,7 @@ class PresentationTests(unittest.TestCase):
         value.pop('public_report_version')
         self.assertEqual(hashlib.sha256(report.markdown(value).encode()).hexdigest(),
                          '80c5780d1d598f5373d7227c39f6b667bc3e3d038ecb068f94c8d51ab1f5b647')
-        value['public_report_version'] = 3
+        value['public_report_version'] = 4
         with self.assertRaisesRegex(ValueError, 'UNKNOWN_PUBLIC_REPORT_VERSION'):
             report.markdown(value)
 

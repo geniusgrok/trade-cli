@@ -34,7 +34,7 @@ def contract_fixture():
     plaintext = json.dumps(payload).encode(); cipher = b'synthetic sealed bytes'
     manifest = {name: '1' * 64 for name in seed_contract.MANIFEST_FIELDS if name.endswith('_sha256')}
     manifest.update(schema_version=1, identity=profile.INHERITED, old_source=profile.STATE_ORIGIN['old_source'],
-        cutover_source=profile.SOURCE_SHA, baseline_close='2026-09-30', state_origin=profile.STATE_ORIGIN.copy(),
+        cutover_source=profile.SEED_SOURCE_SHA, baseline_close='2026-09-30', state_origin=profile.STATE_ORIGIN.copy(),
         cipher_file='approved_seed.enc', cipher_sha256=store.digest(cipher), git_blob_oid=publisher.blob_id(cipher),
         plaintext_sha256=store.digest(plaintext), seed_bundle_sha256=store.digest(bundle), evidence_date='2026-10-08',
         evidence_bundle_sha256=store.digest(bundle), evidence_provenance=provenance,
@@ -46,7 +46,7 @@ def contract_fixture():
 def seed_record(actions_id):
     data, original = full_bundle()
     report = {**fixture(), 'target_date': '2026-09-30', 'data_date': '2026-09-30',
-        'strategy_sha': profile.SOURCE_SHA, 'actions_run_id': str(actions_id),
+        'strategy_sha': profile.SEED_SOURCE_SHA, 'actions_run_id': str(actions_id),
         'actions_run_url': f'https://github.com/geniusgrok/trade-cli/actions/runs/{actions_id}', 'trigger': 'workflow_dispatch',
         'simulation_identity': profile.INHERITED, 'state_origin': profile.STATE_ORIGIN.copy(), 'profile': {'synthetic': True},
         'continuation': {'mode': 'native_full_checkpoint_seed', 'previous_close': '2026-09-30'}}
@@ -56,7 +56,7 @@ def seed_record(actions_id):
         (root / 'output/daily_report.json').write_text(json.dumps(report))
         (root / 'output/daily_report.md').write_text(markdown)
         bundle = store.pack(root)
-    return {'status': 'DEGRADED', 'run_id': str(actions_id), 'strategy_sha': profile.SOURCE_SHA,
+    return {'status': 'DEGRADED', 'run_id': str(actions_id), 'strategy_sha': profile.SEED_SOURCE_SHA,
         'simulation_identity': profile.INHERITED, 'state_origin': profile.STATE_ORIGIN.copy(), 'report': report,
         'markdown': markdown, 'risk_state': json.loads(original['output/risk_state.json']),
         'bundle': base64.b64encode(bundle).decode(), 'bytes': len(bundle), 'sha256': store.digest(bundle),

@@ -43,7 +43,7 @@ def extract_snapshot(data: bytes, destination: Path, day: str, provenance: dict)
                 raise ValueError('IMPORT_RECOVERY_RECEIPT_IDENTITY')
             facts = seed_contract.strict_json(receipt)
             if (facts.get('nature') != 'posttask_provider_full_history_recovery_not_historical_receipt' or
-                    facts.get('producer_source') != profile.SOURCE_SHA or facts.get('old_observed_close') != BASELINE or
+                    facts.get('producer_source') != profile.SEED_SOURCE_SHA or facts.get('old_observed_close') != BASELINE or
                     facts.get('target_close') != day or facts.get('original_current_bundle_sha256') != provenance['original_bundle_sha256'] or
                     facts.get('same_market_no_code_mapping_no_history_splice') is not True or
                     facts.get('strict_old_native_prefixes_exact') is not True or
@@ -63,7 +63,7 @@ def extract_snapshot(data: bytes, destination: Path, day: str, provenance: dict)
 
 def validate_native_seed(root: Path, evidence: Path, payload: dict, manifest: dict) -> tuple[dict, dict]:
     source = profile.source_path()
-    profile.require_source(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip())
+    profile.require_seed_source(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip())
     sys.path.insert(0, str(source))
     from quantfusion.application.daily_context import ScanContext, ScanRequest
     from quantfusion.application.daily_scan import build_argument_parser
@@ -138,6 +138,8 @@ def initialize(record: dict) -> None:
     if not profile.independent():
         raise ValueError('EXPLICIT_INDEPENDENT_IDENTITY_REQUIRED')
     profile.require_record(record)
+    if record.get('strategy_sha') != profile.SEED_SOURCE_SHA:
+        raise ValueError('INDEPENDENT_SEED_SOURCE_IDENTITY')
     branch = profile.state_branch()
     path = store._path(BASELINE)
     if store.api('GET', f'/git/ref/heads/{branch}') is not None:
@@ -191,7 +193,7 @@ def main() -> None:
     state, native = validate_native_seed(root, evidence, payload, manifest)
     (evidence / 'provenance.json').write_text(json.dumps(payload['evidence_provenance'], sort_keys=True))
     from runner import identity
-    report = {**identity(profile.source_path()), 'target_date': BASELINE, 'data_date': BASELINE,
+    report = {**identity(profile.source_path(), seed=True), 'target_date': BASELINE, 'data_date': BASELINE,
               'state_origin': profile.STATE_ORIGIN.copy(), 'profile': payload['seed_profile'],
               'continuation': {'mode': 'native_full_checkpoint_seed', 'previous_close': BASELINE},
               'comparison': {'status': '不可比较', 'reason': '事后重建基线；没有前一日独立序列结果', 'changes': []},
@@ -206,7 +208,7 @@ def main() -> None:
     (root / 'output/daily_report.json').write_text(json.dumps(report, ensure_ascii=False, allow_nan=False))
     (root / 'output/daily_report.md').write_text(markdown)
     bundle = store.pack(root)
-    record = {'status': report['status'], 'run_id': str(report['actions_run_id']), 'strategy_sha': profile.SOURCE_SHA,
+    record = {'status': report['status'], 'run_id': str(report['actions_run_id']), 'strategy_sha': profile.SEED_SOURCE_SHA,
               'simulation_identity': profile.INHERITED, 'state_origin': profile.STATE_ORIGIN.copy(), 'previous_date': None,
               'report': report, 'markdown': markdown, 'risk_state': state, 'bundle': base64.b64encode(bundle).decode(),
               'sha256': store.digest(bundle), 'bytes': len(bundle),

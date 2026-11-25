@@ -53,6 +53,17 @@ MARKET = {
     'portfolio.sector_guard_active': '行业保护',
     'portfolio.terminal_risk_lock': '终止风险锁',
 }
+MARKET_V3 = {**MARKET,
+    'major_damage_tactical.status': '深回撤修复战术状态',
+    'major_damage_tactical.damage_depth': '市场深回撤幅度',
+    'major_damage_tactical.repair_fraction': '市场修复比例',
+    'major_damage_tactical.exposure_ceiling': '战术总仓位上限',
+    'major_damage_tactical.market_phase': '修复市场阶段',
+    'major_damage_tactical.native_restrictions': '原生风控限制',
+    'held_structure_risk.status': '纸面组合持仓结构风险状态',
+}
+# Only known new machine intents; never private reason text/quantities.
+RISK_INTENTS_V3 = frozenset(('major_tactical_exit', 'major_tactical_trim', 'held_structure_trim'))
 SIGNAL = {
     'signal': '行动信号', 'action': '行动', 'side': '方向',
     'eligibility': '资格', 'target_weight': '目标仓位',
@@ -129,8 +140,12 @@ def intents(values: Any, *, version: int = 2) -> str:
     if not isinstance(values, list) or any(not isinstance(v, dict) for v in values):
         raise ValueError('INVALID_PUBLIC_SIGNALS')
     fields = SIGNAL if version == 1 else INTENT
-    rows = ['；'.join(f'{label}：{scalar(row[key])}' for key, label in fields.items() if key in row)
-            for row in values]
+    rows = []
+    for row in values:
+        shown = [f'{label}：{scalar(row[key])}' for key, label in fields.items() if key in row]
+        if version >= 3 and row.get('risk_reason') in RISK_INTENTS_V3:
+            shown.append('风险原因代码：' + scalar(row['risk_reason']))
+        rows.append('；'.join(shown))
     return ' / '.join(row or '存在记录，未提供可公开的行动字段' for row in rows) if rows else '无记录'
 
 
@@ -142,18 +157,22 @@ def symbol_names(report: dict) -> dict[str, str]:
             and isinstance(item.get('name'), str) and item['name']}
 
 
-def with_symbol_names(value: Any, names: dict[str, str]) -> str:
-    text = scalar(value)
+def _add_symbol_names(text: str, names: dict[str, str]) -> str:
     return re.sub(r'(?<!\d)(\d{6})(?!\d)',
                   lambda match: f"{match.group(1)} {names[match.group(1)]}"
                   if match.group(1) in names else match.group(0), text)
+
+
+def with_symbol_names(value: Any, names: dict[str, str]) -> str:
+    return _add_symbol_names(scalar(value), names)
 
 
 def changes(report: dict, *, version: int = 2) -> list[str]:
     comparison = report.get('comparison') or {}
     if comparison.get('status') == '不可比较':
         return []
-    labels = {'market.' + path: label for path, label in MARKET.items()}
+    market_fields = MARKET_V3 if version >= 3 else MARKET
+    labels = {'market.' + path: label for path, label in market_fields.items()}
     formats = {}
     for item in get(report, 'observation.symbols') or []:
         code, name = item['code'], item['name']
@@ -173,14 +192,18 @@ def changes(report: dict, *, version: int = 2) -> list[str]:
         old, new = fmt(change.get('yesterday')), fmt(change.get('today'))
         if old != new:
             names = symbol_names(report)
-            result.append(f'{with_symbol_names(labels[path], names)}：{with_symbol_names(old, names)} → {with_symbol_names(new, names)}')
+            # Each intent field has already passed scalar/safe_document.
+            # Do not treat a long aggregate of legal T+1 instructions as one
+            # untrusted scalar or escape it twice. Preserve v1/v2 bytes.
+            add_names = _add_symbol_names if version >= 3 else with_symbol_names
+            result.append(f'{with_symbol_names(labels[path], names)}：{add_names(old, names)} → {add_names(new, names)}')
     return result
 
 
 def markdown(report: dict) -> str:
     # Saved results without this field retain their original immutable bytes.
     version = report.get('public_report_version', 1)
-    if type(version) is not int or version not in (1, 2):
+    if type(version) is not int or version not in (1, 2, 3):
         raise ValueError('UNKNOWN_PUBLIC_REPORT_VERSION')
     target = checked_date(report['target_date'])
     status = report['status']
@@ -250,7 +273,7 @@ def markdown(report: dict) -> str:
         names = symbol_names(report)
         if set(names) != set(codes):
             raise ValueError('PUBLIC_CORE17_NAMES')
-        for path, label in MARKET.items():
+        for path, label in (MARKET_V3 if version >= 3 else MARKET).items():
             value = with_symbol_names(get(observation.get("market"), path), names)
             out.append(f'| {label} | {value} |')
         out.extend(['', '独立风险意见与最终买入限制须结合阅读；风险等级为零不等于允许买入。', '',
@@ -273,7 +296,7 @@ def markdown(report: dict) -> str:
                 '零数量或受阻候选不等于可执行买入；待执行意图不代表已成交。',
                 '补存或再次读取日报不会重新计算策略，不改变原结果的日期、版本和状态。',
                 '盘后信号仅供下一可交易日人工核对，不连接券商或下单。'])
-    if version == 2:
+    if version >= 2:
         out.append('原生执行队列标记仅表示模拟队列分类，不保证真实市场可成交。')
     result = '\n'.join(out) + '\n'
     safe_document(result)

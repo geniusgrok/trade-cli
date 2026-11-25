@@ -27,11 +27,11 @@ CHECKPOINT_SECTIONS = {'schema_version', 'last_completed_close', 'dates', 'initi
     'last_opinion', 'last_agreement', 'controller', 'budget'}
 
 
-def identity(source: Path) -> dict:
+def identity(source: Path, *, seed: bool = False) -> dict:
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
     if not re.fullmatch('[0-9a-f]{40}', sha):
         raise ValueError('INVALID_SOURCE_SHA')
-    series.require_source(sha)
+    (series.require_seed_source if seed else series.require_source)(sha)
     run = os.environ['GITHUB_RUN_ID']
     result = {'strategy_sha': sha, 'workflow_sha': os.environ['GITHUB_SHA'],
             'actions_run_id': run, 'actions_run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
@@ -270,6 +270,9 @@ def require_resume_interval(ctx, calendar, previous_close: str) -> dict:
     for code in ('000300', '000682'):
         frame = _normalize_index_frame(pd.read_csv(Path(ctx.request.regime_data_dir) / f'{code}.csv'), end_date=target)
         frame.index = pd.DatetimeIndex(frame['date'])
+        # Verify only dates covered by the sourced calendar, as native
+        # index_coverage does. Keep the full archive for model/input hashes.
+        frame = frame.loc[ctx.scan_dates['calendar_coverage_start']:]
         frames.append(('INDEX:' + code, frame, True))
     economic_dates = set()
     for code, frame, index in frames:
@@ -320,7 +323,10 @@ def failure_reason(exc: Exception) -> str:
         'INDEX_EVIDENCE_UNAVAILABLE', 'HISTORICAL_INDEX_UNAVAILABLE', 'HISTORICAL_INDEX_DIRECTORY_FROZEN',
         'RESUME_UNEXPECTED_EVIDENCE_DATE', 'RESUME_PRE_LISTING_CONFLICT', 'RESUME_HISTORY_GAP',
         'RESUME_ECONOMIC_SESSION_MISSING', 'FROZEN_INDEX_IDENTITY_MISMATCH', 'BUNDLE_INTEGRITY', 'UNSAFE_BUNDLE'}
-    allowed.add('CHECKPOINT_HISTORY_CHANGED')
+    allowed.update({'CHECKPOINT_HISTORY_CHANGED', 'CHECKPOINT_MIGRATION_SOURCE',
+        'CHECKPOINT_MIGRATION_BOUNDARY', 'CHECKPOINT_MIGRATION_IDENTITY', 'CHECKPOINT_MIGRATION_SELL_PROOF',
+        'CHECKPOINT_MIGRATION_GUARD', 'CHECKPOINT_MIGRATION_SIGNAL', 'CHECKPOINT_MIGRATION_STATE',
+        'CHECKPOINT_MIGRATION_RESTORE'})
     return code if code in allowed else 'PRODUCTION_VALIDATION_FAILED'
 
 
@@ -404,7 +410,7 @@ def run() -> tuple[int, str]:
         target = os.environ.get('TARGET_DATE', '') or now.date().isoformat()
     reserved = False
     finalized = False
-    report = {**ident, 'target_date': target, 'status': 'FAILED', 'public_report_version': 2}
+    report = {**ident, 'target_date': target, 'status': 'FAILED', 'public_report_version': 3}
     risk = None
     log_path = root / 'logs' / 'production.log'
     public_log = sys.stdout
@@ -541,6 +547,11 @@ def run() -> tuple[int, str]:
                     and previous['date'] == previous_date else None)
             from quantfusion.io.state_store import validate_checkpoint_identity
             try:
+                if previous['strategy_sha'] == series.SEED_SOURCE_SHA:
+                    from source_migration import migrate_a92_checkpoint
+                    report['phase'] = 'APPROVED_SOURCE_MIGRATION'
+                    report['continuation']['source_migration'] = migrate_a92_checkpoint(
+                        ctx, previous, output / 'snapshots' / previous['date'])
                 validate_checkpoint_identity(ctx, ctx.prev_risk['checkpoint'])
             except ValueError as exc:
                 if failure_reason(exc) == 'CHECKPOINT_HISTORY_CHANGED':

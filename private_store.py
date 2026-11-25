@@ -128,6 +128,8 @@ def latest_result() -> tuple[str, dict] | None:
 def request(route: str, payload: dict) -> dict:
     if route in {'start', 'finish', 'event'}:
         profile.require_writer()
+    if route == 'start' and profile.independent():
+        profile.require_source(payload['strategy_sha'])
     day = payload['date']
     path = _path(day)
     head, tree, files = _snapshot()
